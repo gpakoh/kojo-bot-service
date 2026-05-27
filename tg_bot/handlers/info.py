@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from telegram.ext import ConversationHandler, CallbackContext
+from telegram.ext import ConversationHandler
 
 # Conversation Handler Placeholder
 

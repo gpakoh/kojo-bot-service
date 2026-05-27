@@ -2,10 +2,11 @@
 import io
 import logging
 import time
-from PIL import Image
 from pathlib import Path
+from typing import Any
+
+from PIL import Image
 from telegram import Message
-from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 PHOTO_CACHE_TTL_SECONDS = 24 * 60 * 60

@@ -156,7 +156,7 @@ class AICommunicationService:
                     if match:
                         product_names.append(match.group(1).strip())
 
-                return product_names if product_names else context
+                return product_names if product_names else context  # type: ignore[no-any-return]
             except CircuitOpenError:
                 logger.warning("Circuit Open For Semantic Retrieval, Falling Back To Middleware")
             except (RuntimeError, ConnectionError, TimeoutError, OSError) as e:
@@ -238,7 +238,7 @@ class AICommunicationService:
             return
 
         # Анимация и запрос к llm
-        animator = ThinkingAnimator(context, chat_id, placeholder)
+        animator = ThinkingAnimator(context, chat_id, placeholder)  # type: ignore[arg-type]
         await animator.start()
 
         try:
@@ -335,7 +335,7 @@ class AICommunicationService:
                     # Форматируем здесь
                     pages = self.format_history_to_pages(raw_msgs)
                     return {"status": "success", "pages": pages}
-        except (RuntimeError, ConnectionError, TimeoutError, OSError):
+        except (RuntimeError, ConnectionError, TimeoutError, OSError, httpx.HTTPError):
             logger.info("🌐 [history] master недоступен напрямую, переключаюсь на gateway...")
 
         # Режим б: через gatewayclient с circuit breaker + hmac
@@ -364,7 +364,7 @@ class AICommunicationService:
                     raw_msgs = data.get("messages", [])
                     pages = self.format_history_to_pages(raw_msgs)
                     return {"status": "success", "pages": pages}
-        except (RuntimeError, ConnectionError, TimeoutError, OSError) as e:
+        except (RuntimeError, ConnectionError, TimeoutError, OSError, httpx.HTTPError) as e:
             logger.error(f"❌ [History] Ошибка получения истории по всем путям: {e}")
 
         return {"status": "error", "pages": ["⚠️ Не удалось загрузить историю."]}

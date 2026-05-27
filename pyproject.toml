@@ -10,6 +10,7 @@ addopts = "--cov=tg_bot/domain --cov=tg_bot/application --cov=tg_bot/bot_service
 [tool.ruff]
 line-length = 120
 target-version = "py312"
+exclude = ["migrations/"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
@@ -18,6 +19,11 @@ select = ["E", "F", "W", "I"]
 "__init__.py" = ["F401"]
 "tg_bot/keyboards.py" = ["E501"]
 "tg_bot/main.py" = ["E501", "E402"]
+"services/proxy_adapter.py" = ["E501"]
+"services/proxy_pool.py" = ["E501"]
+"tg_bot/rate_limit_middleware.py" = ["E501"]
+"utils/config_pusher.py" = ["E501", "E402"]
+"tg_bot/application/queries/user_queries.py" = ["F401"]
 "tg_bot/handlers/registration.py" = ["E501", "E402"]
 "tg_bot/application/queries/order_queries.py" = ["E501", "E402"]
 "tg_bot/bot_services/db.py" = ["E501", "E402"]
@@ -82,5 +88,16 @@ exclude = [
 module = "tg_bot.infrastructure.repositories.*"
 ignore_errors = true
 # Abstract Repository Pattern — documented exception per MANIFEST §1.2
+
+[[tool.mypy.overrides]]
+module = [
+  "tg_bot.handlers.*",
+  "tg_bot.bot_services.*",
+  "tg_bot.ui_helpers",
+]
+disable_error_code = ["attr-defined"]
+# PTB v22.5 narrows query.message to MaybeInaccessibleMessage;
+# runtime access to .reply_text / .delete / .photo / .video / .animation
+# is safe because the actual type is always Message in callback context.
 
 

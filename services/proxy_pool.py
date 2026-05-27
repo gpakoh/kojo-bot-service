@@ -317,7 +317,6 @@ def _cleanup_stale_pools() -> None:
 def get_proxy_pool(bot_id: str = "default") -> ProxyPool:
     """Получить пул прокси для бота."""
     import os
-    from typing import cast
 
     _cleanup_stale_pools()
 

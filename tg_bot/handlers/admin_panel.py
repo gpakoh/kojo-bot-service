@@ -30,6 +30,7 @@ from tg_bot.bot_services.user_service import UserService
 # Сервисы
 from tg_bot.callback_validator import validate_callback
 from tg_bot.decorators import auth_guard
+from tg_bot.domain.order import OrderStatus as DomainOrderStatus
 from tg_bot.handlers.common import cleanup_previous_menu
 from tg_bot.handlers.staff import show_stats
 
@@ -98,7 +99,6 @@ from tg_bot.keyboards import (
     get_user_welcome_keyboard,
     get_yandex_confirm_keyboard,
 )
-from tg_bot.domain.order import OrderStatus as DomainOrderStatus
 from tg_bot.models import OrderStatus, SenderRole, UserRole, UserStatus
 from utils.config_pusher import push_config_to_integration
 from utils.env_utils import update_env_variable

@@ -2,11 +2,12 @@
 """
 Query Handlers For User Domain.
 """
-from typing import cast, Optional
+from typing import Optional, cast
+
 try:
     from typing import override
 except ImportError:
-    from typing_extensions import override
+    pass
 
 import asyncpg
 

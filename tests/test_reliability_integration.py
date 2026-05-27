@@ -350,8 +350,10 @@ class TestAICommunicationServiceGatewayPath:
             gateway=mock_gateway,
         )
 
-        with patch("tg_bot.infrastructure.secrets_loader.SecretsLoader.get_required") as mock_get:
-            mock_get.return_value = "shared-secret"
+        with (
+            patch("tg_bot.infrastructure.secrets_loader.SecretsLoader.get_required", return_value="shared-secret"),
+            patch("httpx.AsyncClient.post", side_effect=ConnectionError("no network")),
+        ):
             async def run() -> Any:
                 return await service.get_chat_history_paged(user_id=123, nickname="User")
 

@@ -1,6 +1,5 @@
 # Tg_bot/main.py
 import asyncio
-import httpx
 import json
 import logging
 import os
@@ -9,6 +8,7 @@ import sys
 from pathlib import Path
 
 import asyncpg
+import httpx
 from dotenv import load_dotenv
 from telegram import (
     InlineQueryResultArticle,

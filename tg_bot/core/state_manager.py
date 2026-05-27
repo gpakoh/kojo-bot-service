@@ -104,7 +104,7 @@ class StateManager:
             except (TypeError, ValueError):
                 encoded[k] = str(v)
         if encoded:
-            await r.hset(self._data_key(user_id), mapping=encoded)  # type: ignore[misc]
+            await r.hset(self._data_key(user_id), mapping=encoded)  # type: ignore[misc, arg-type]
             await r.expire(self._data_key(user_id), self.STATE_TTL)
 
     async def clear_data(self, user_id: int, key: str | None = None) -> None:

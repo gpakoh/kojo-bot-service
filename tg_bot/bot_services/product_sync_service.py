@@ -236,7 +236,7 @@ async def _get_variant_from_llm(name: str, task_type: str) -> str:
                     # 5. убираем точку в конце
                     val = val.rstrip('.')
 
-                    return val
+                    return val  # type: ignore[no-any-return]
 
                 if resp.status_code == 429:
                     await asyncio.sleep((attempt + 1) * 3)

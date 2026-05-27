@@ -22,70 +22,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Diag — python version
-        run: python --version
-
-      - name: Diag — pip list
-        run: pip list 2>&1
-
-      - name: Diag — import pytest
-        run: python -c "import pytest; print('pytest:', pytest.__version__)"
-
-      - name: Diag — import mypy
-        run: python -c "import mypy; print('mypy:', mypy.__version__)"
-
-      - name: Diag — import ruff
-        run: python -c "import ruff; print('ruff:', ruff.__version__)"
-
-      - name: Diag — sys.path
-        run: python -c "import sys; [print(p) for p in sys.path]"
-
-      - name: Diag — import tg_bot
-        if: always()
-        continue-on-error: true
-        run: python3 -c "
-import sys
-sys.path.insert(0, '.')
-try:
-    import tg_bot
-    print('tg_bot:', tg_bot.__file__)
-except Exception as e:
-    print(f'tg_bot import FAILED: {e}')
-"
-
-      - name: Diag — import services
-        if: always()
-        continue-on-error: true
-        run: python3 -c "
-import sys
-sys.path.insert(0, '.')
-try:
-    import services
-    print('services:', services.__file__)
-except Exception as e:
-    print(f'services import FAILED: {e}')
-"
-
       - name: Compileall
-        if: always()
         run: python -m compileall . -q -x '/(\.git|__pycache__|cache|deploy|\.venv)/'
 
-      - name: Pytest collect
-        if: always()
-        continue-on-error: true
-        run: python -m pytest --collect-only -q 2>&1
+      - name: Pytest
+        run: python -m pytest -q --tb=short 2>&1
 
-      - name: Pytest run
-        if: always()
-        continue-on-error: true
-        run: python -m pytest -vv --tb=long 2>&1
+      - name: mypy
+        run: python -m mypy tg_bot services --show-error-codes
 
-      - name: Mypy run
-        if: always()
-        continue-on-error: true
-        run: python -m mypy tg_bot services --show-error-codes 2>&1
-
-      - name: Ruff run
-        if: always()
-        continue-on-error: true
-        run: python -m ruff check . 2>&1
+      - name: ruff
+        run: python -m ruff check tg_bot/ services/ utils/

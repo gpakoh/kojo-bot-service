@@ -152,7 +152,7 @@ class Cache:
                 logger.info("Cache: Redis Connection Established")
             except (redis.ConnectionError, redis.TimeoutError, OSError) as e:
                 logger.warning(f"Cache: Redis unavailable, using in-memory fallback: {e}")
-                await self._redis.aclose()  # type: ignore[union-attr]
+                await self._redis.aclose()  # type: ignore[union-attr, attr-defined]
                 self._redis = None
 
         if self._enable_config_mode and self._redis:

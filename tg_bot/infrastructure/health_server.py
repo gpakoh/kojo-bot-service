@@ -40,7 +40,7 @@ async def ready_handler(request: web.Request) -> web.Response:
         try:
             await redis.ping()
             checks["redis"] = True
-        except (redis.ConnectionError, redis.TimeoutError, OSError) as e:
+        except (redis.ConnectionError, redis.TimeoutError, OSError):
             checks["redis"] = False
     else:
         checks["redis"] = False  # optional, not required for ready
