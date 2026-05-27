@@ -10,14 +10,15 @@
 
 `main` is **protected**:
 
-- Direct push — **disabled** (admins: temporary exception during early phase, documented below)
+- Direct push — **disabled** for all users
 - Force push — **disabled**
 - Branch deletion — **disabled**
 - Required CI status check — **enabled**: the `test` job (compileall → pytest → mypy → ruff) must pass
+- Admin override — **disabled** (`block_admin_merge_override: false`)
 
-### Admin direct push exception
+All changes must go through a feature branch and pull request.
 
-During early development (single-developer phase) direct push by admins is allowed as a temporary measure. This will be removed once a second contributor joins or after v0.2.0, whichever comes first.
+
 
 ## Branch model: trunk-based
 
