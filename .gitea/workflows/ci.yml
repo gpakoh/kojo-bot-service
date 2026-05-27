@@ -41,28 +41,51 @@ jobs:
         run: python -c "import sys; [print(p) for p in sys.path]"
 
       - name: Diag — import tg_bot
+        if: always()
         continue-on-error: true
-        run: python -c "import tg_bot; print('tg_bot:', tg_bot.__file__)"
+        run: python3 -c "
+import sys
+sys.path.insert(0, '.')
+try:
+    import tg_bot
+    print('tg_bot:', tg_bot.__file__)
+except Exception as e:
+    print(f'tg_bot import FAILED: {e}')
+"
 
       - name: Diag — import services
+        if: always()
         continue-on-error: true
-        run: python -c "import services; print('services:', services.__file__)"
+        run: python3 -c "
+import sys
+sys.path.insert(0, '.')
+try:
+    import services
+    print('services:', services.__file__)
+except Exception as e:
+    print(f'services import FAILED: {e}')
+"
 
       - name: Compileall
+        if: always()
         run: python -m compileall . -q -x '/(\.git|__pycache__|cache|deploy|\.venv)/'
 
       - name: Pytest collect
+        if: always()
         continue-on-error: true
         run: python -m pytest --collect-only -q 2>&1
 
       - name: Pytest run
+        if: always()
         continue-on-error: true
         run: python -m pytest -vv --tb=long 2>&1
 
       - name: Mypy run
+        if: always()
         continue-on-error: true
         run: python -m mypy tg_bot services --show-error-codes 2>&1
 
       - name: Ruff run
+        if: always()
         continue-on-error: true
         run: python -m ruff check . 2>&1
