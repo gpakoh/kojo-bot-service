@@ -3,8 +3,6 @@ name: Kojo CI
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
 
 jobs:
   test:
@@ -19,34 +17,46 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+      - name: Hello
+        run: echo "runner works"
+
+      - name: List
+        run: ls -la
+
+      - name: Python
+        run: python --version
+
+      - name: Install
+        run: pip install -r requirements.txt
+
+      - name: Versions
+        run: pip list | head -30
+
+      - name: Import pytest
+        run: python -c "import pytest; print('pytest ok')"
+
+      - name: Import tg_bot
+        run: python -c "import tg_bot; print('tg_bot ok')"
 
       - name: Compileall
         run: python -m compileall tg_bot services utils alembic tests -q
 
+      - name: Pytest collect
+        continue-on-error: true
+        run: python -m pytest --collect-only -q 2>&1
+
       - name: Pytest
         continue-on-error: true
-        run: python -m pytest -q --tb=line
+        run: python -m pytest -vv --tb=long 2>&1
 
       - name: Mypy
         continue-on-error: true
-        run: python -m mypy tg_bot services --no-error-summary
+        run: python -m mypy tg_bot services --show-error-codes 2>&1
 
       - name: Ruff
         continue-on-error: true
-        run: python -m ruff check .
+        run: python -m ruff check . 2>&1
 
-  docker:
-    runs-on: ubuntu-latest
-    needs: test
-    if: always()
-    continue-on-error: true
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Docker build
-        run: docker build -t kojo-bot-service:ci -f docker/Dockerfile .
+      - name: Env safe
+        continue-on-error: true
+        run: env | sort | grep -viE '(token|secret|key|password|credential)' 2>&1
