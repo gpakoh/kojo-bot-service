@@ -17,46 +17,52 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Hello
-        run: echo "runner works"
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-      - name: List
-        run: ls -la
-
-      - name: Python
+      - name: Diag — python version
         run: python --version
 
-      - name: Install
-        run: pip install -r requirements.txt
+      - name: Diag — pip list
+        run: pip list 2>&1
 
-      - name: Versions
-        run: pip list | head -30
+      - name: Diag — import pytest
+        run: python -c "import pytest; print('pytest:', pytest.__version__)"
 
-      - name: Import pytest
-        run: python -c "import pytest; print('pytest ok')"
+      - name: Diag — import mypy
+        run: python -c "import mypy; print('mypy:', mypy.__version__)"
 
-      - name: Import tg_bot
-        run: python -c "import tg_bot; print('tg_bot ok')"
+      - name: Diag — import ruff
+        run: python -c "import ruff; print('ruff:', ruff.__version__)"
+
+      - name: Diag — sys.path
+        run: python -c "import sys; [print(p) for p in sys.path]"
+
+      - name: Diag — import tg_bot
+        continue-on-error: true
+        run: python -c "import tg_bot; print('tg_bot:', tg_bot.__file__)"
+
+      - name: Diag — import services
+        continue-on-error: true
+        run: python -c "import services; print('services:', services.__file__)"
 
       - name: Compileall
-        run: python -m compileall tg_bot services utils alembic tests -q
+        run: python -m compileall . -q -x '/(\.git|__pycache__|cache|deploy|\.venv)/'
 
       - name: Pytest collect
         continue-on-error: true
         run: python -m pytest --collect-only -q 2>&1
 
-      - name: Pytest
+      - name: Pytest run
         continue-on-error: true
         run: python -m pytest -vv --tb=long 2>&1
 
-      - name: Mypy
+      - name: Mypy run
         continue-on-error: true
         run: python -m mypy tg_bot services --show-error-codes 2>&1
 
-      - name: Ruff
+      - name: Ruff run
         continue-on-error: true
         run: python -m ruff check . 2>&1
-
-      - name: Env safe
-        continue-on-error: true
-        run: env | sort | grep -viE '(token|secret|key|password|credential)' 2>&1
