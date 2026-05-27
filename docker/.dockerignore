@@ -1,0 +1,24 @@
+# /quart-ollama_bot/databases/kojo/deploy/.dockerignore
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+.git
+.gitignore
+cache/
+base/
+bot_persistence.pickle
+deploy/
+tests/
+*.md
+.benchmarks
+.coverage
+.hypothesis
+.mypy_cache
+.pytest_cache
+.ruff_cache
+user_profiles/

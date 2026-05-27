@@ -1,0 +1,74 @@
+# /quart-ollama_bot/databases/kojo/docker/docker-compose.yml
+
+services:
+  RAG_kojo_bot:
+    container_name: RAG_kojo_bot
+    image: kojo-bot:latest
+    restart: unless-stopped
+    depends_on:
+      RAG_kojo-db:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+    user: "1000:1000"
+    env_file:
+      - ../.env
+    environment:
+      TZ: "Europe/Moscow"
+      USE_PROXY: "true"
+      QUART_MAIN_API: http://RAG_quart-server:5000
+      BOT_INTERNAL_PORT: "8080"
+      DB_URL: postgresql://kojo_user:kojo_password@RAG_kojo-db:5432/kojo_db
+      DATABASE_URL: postgresql://kojo_user:kojo_password@RAG_kojo-db:5432/kojo_db
+      TG_PROXY_URL: ""
+      PROXY_POOL: 10.10.10.137:20170,10.10.10.137:20171,10.10.10.137:20172,192.168.1.199:3128,192.168.1.199:20170,192.168.1.199:20171,192.168.1.199:20172
+      MY_INTERNAL_URL: http://10.10.10.132:8080
+
+    volumes:
+      # Persistence и runtime данные
+      - kojo_bot_data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${BOT_INTERNAL_PORT:-8080}/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      internal_net: {}
+      proxmox_macvlan:
+        ipv4_address: 10.10.10.132
+
+  RAG_kojo-db:
+    container_name: RAG_kojo-db
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kojo_user
+      POSTGRES_PASSWORD: kojo_password
+      POSTGRES_DB: kojo_db
+    volumes:
+      - kojo_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5435:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kojo_user -d kojo_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal_net
+
+volumes:
+  kojo_bot_data:
+  kojo_postgres_data:
+    external: true
+    name: kojo_kojo_postgres_data
+
+networks:
+  internal_net:
+    name: internal_net
+    external: true
+  proxmox_macvlan:
+    external: true
+

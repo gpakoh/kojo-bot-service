@@ -1,0 +1,86 @@
+[project]
+name = "kojo"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+addopts = "--cov=tg_bot/domain --cov=tg_bot/application --cov=tg_bot/bot_services --cov=services --cov=utils --cov-report=term-missing"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"tg_bot/keyboards.py" = ["E501"]
+"tg_bot/main.py" = ["E501", "E402"]
+"tg_bot/handlers/registration.py" = ["E501", "E402"]
+"tg_bot/application/queries/order_queries.py" = ["E501", "E402"]
+"tg_bot/bot_services/db.py" = ["E501", "E402"]
+"tg_bot/bot_services/ai_communication_service.py" = ["E501"]
+"tg_bot/bot_services/cart_validator.py" = ["E501"]
+"tg_bot/bot_services/delivery_service.py" = ["E501"]
+"tg_bot/bot_services/favorite_service.py" = ["E501"]
+"tg_bot/bot_services/notification_service.py" = ["E501"]
+"tg_bot/bot_services/order_service.py" = ["E501"]
+"tg_bot/bot_services/payment_service.py" = ["E501"]
+"tg_bot/bot_services/product_sync_service.py" = ["E501"]
+"tg_bot/bot_services/user_address_service.py" = ["E501"]
+"tg_bot/bot_services/user_service.py" = ["E501"]
+"tg_bot/callbacks.py" = ["E501"]
+"tg_bot/core/fsm_router.py" = ["E501"]
+"tg_bot/core/views.py" = ["E501"]
+"tg_bot/db_monitoring.py" = ["E501"]
+"tg_bot/decorators.py" = ["E501"]
+"tg_bot/handlers/admin/commands.py" = ["E501"]
+"tg_bot/handlers/admin/communication.py" = ["E501"]
+"tg_bot/handlers/admin/courier.py" = ["E501"]
+"tg_bot/handlers/admin/pickup.py" = ["E501"]
+"tg_bot/handlers/admin/users.py" = ["E501"]
+"tg_bot/handlers/ai_chat.py" = ["E501"]
+"tg_bot/handlers/favorites.py" = ["E501"]
+"tg_bot/handlers/info.py" = ["E501"]
+"tg_bot/handlers/order.py" = ["E501"]
+"tg_bot/handlers/order_brew.py" = ["E501"]
+"tg_bot/handlers/order_cart.py" = ["E501"]
+"tg_bot/handlers/order_delivery_checkout.py" = ["E501"]
+"tg_bot/handlers/order_gift.py" = ["E501"]
+"tg_bot/handlers/order_product_view.py" = ["E501"]
+"tg_bot/handlers/order_search_sort.py" = ["E501"]
+"tg_bot/handlers/staff.py" = ["E501"]
+"tg_bot/handlers/user_panel.py" = ["E501"]
+"tg_bot/llm_client.py" = ["E501"]
+"tg_bot/read_models/admin.py" = ["E501"]
+"tg_bot/read_models/keyboards.py" = ["E501"]
+"tg_bot/utils/redis_config_manager.py" = ["E501", "E402"]
+"tg_bot/utils/redis_persistence.py" = ["E501", "E402"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+show_error_codes = true
+pretty = true
+warn_return_any = true
+warn_unused_ignores = false
+warn_redundant_casts = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+exclude = [
+    "lightrag/",
+    "tests/",
+    "deploy/",
+    "migrations/",
+    ".*/alembic/.*",
+]
+
+[[tool.mypy.overrides]]
+module = "tg_bot.infrastructure.repositories.*"
+ignore_errors = true
+# Abstract Repository Pattern — documented exception per MANIFEST §1.2
+
+

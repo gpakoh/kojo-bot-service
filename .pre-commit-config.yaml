@@ -1,0 +1,15 @@
+repos:
+  - repo: local
+    hooks:
+      - id: run-pre-commit-sh
+        name: Run pre-commit.sh checks (ruff + mypy + pytest)
+        entry: ./pre-commit.sh
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+      - id: check-alembic-migrations
+        name: Check Alembic migrations exist
+        entry: python -c "from pathlib import Path; p = Path('alembic/versions'); files = list(p.glob('*.py')); [f.unlink() if f.name == '__init__.py' else None for f in p.glob('__init__.py')]; assert len([f for f in files if f.suffix == '.py' and f.name != '__init__.py']), 'No alembic migrations found! Run: alembic revision --autogenerate -m \"migration message\"'"
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]

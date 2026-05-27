@@ -1,0 +1,45 @@
+[Unit]
+Description=Kojo Telegram Bot SaaS
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=kojo
+Group=kojo
+WorkingDirectory=/opt/kojo
+Environment="PYTHONPATH=/opt/kojo"
+Environment="PYTHONUNBUFFERED=1"
+Environment="JSON_LOGS=true"
+Environment="LOG_LEVEL=INFO"
+
+# Secrets via EnvironmentFile (chmod 600)
+EnvironmentFile=/etc/kojo/kojo.env
+
+ExecStartPre=/bin/sh -c 'test -f /etc/kojo/kojo.env && test $(stat -c %a /etc/kojo/kojo.env) = "600" || (echo "Bad permissions on secrets file" && exit 1)'
+ExecStart=/opt/kojo/venv/bin/python -m tg_bot.main
+ExecReload=/bin/kill -HUP $MAINPID
+
+Restart=always
+RestartSec=5
+StartLimitInterval=60s
+StartLimitBurst=3
+
+# Graceful shutdown (Phase 3)
+TimeoutStopSec=30
+KillSignal=SIGTERM
+KillMode=mixed
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/kojo/logs /tmp
+PrivateTmp=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=kojo-bot
+
+[Install]
+WantedBy=multi-user.target

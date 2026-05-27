@@ -1,0 +1,57 @@
+openapi: 3.0.0
+info:
+  title: Kojo Bot Federation API
+  version: 1.0.0
+  description: Health and metrics endpoints for federation monitoring
+
+paths:
+  /health:
+    get:
+      summary: Liveness probe
+      description: Returns 200 if the process is alive
+      responses:
+        '200':
+          description: Process is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  service:
+                    type: string
+                    example: kojo-bot
+
+  /ready:
+    get:
+      summary: Readiness probe
+      description: Returns 200 if dependencies (DB, Redis) are reachable
+      responses:
+        '200':
+          description: All dependencies ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ready
+                  checks:
+                    type: object
+        '503':
+          description: One or more dependencies not ready
+
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      description: Exports Prometheus metrics in text format
+      responses:
+        '200':
+          description: Metrics exported
+          content:
+            text/plain:
+              schema:
+                type: string

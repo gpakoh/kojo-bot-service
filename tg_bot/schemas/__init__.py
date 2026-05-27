@@ -1,0 +1,36 @@
+# Tg_bot/schemas/__init__.py
+from tg_bot.schemas.callbacks import (
+    AddressCallback,
+    AIChatCallback,
+    CartCallback,
+    CategoryCallback,
+    CheckoutCallback,
+    DeliveryCallback,
+    FavoriteCallback,
+    InfoCallback,
+    NavigationCallback,
+    OrderActionCallback,
+    OrderCallback,
+    ProductCallback,
+    SettingsCallback,
+    UserActionCallback,
+    parse_callback_data,
+)
+
+__all__ = [
+    'ProductCallback',
+    'CategoryCallback',
+    'CartCallback',
+    'FavoriteCallback',
+    'OrderCallback',
+    'OrderActionCallback',
+    'UserActionCallback',
+    'AddressCallback',
+    'DeliveryCallback',
+    'CheckoutCallback',
+    'NavigationCallback',
+    'InfoCallback',
+    'SettingsCallback',
+    'AIChatCallback',
+    'parse_callback_data',
+]

@@ -1,0 +1,207 @@
+# services/gateway/openapi_spec.yaml
+# OpenAPI 3.0 Specification for External Services
+# 
+# This spec defines the API contracts between the bot and external services.
+# Generate client with: openapi-generator generate -i openapi_spec.yaml -g python -o generated_client
+#
+# For now, this is a reference documentation. In production:
+# 1. Run Quart server with openapi spec enabled
+# 2. Use openapi-generator to create typed client
+# 3. Replace manual httpx calls with generated client
+
+openapi: 3.0.0
+info:
+  title: Kojo External Services API
+  version: 1.0.0
+  description: API contracts for bot-to-service communication
+
+servers:
+  - url: http://localhost:5000
+    description: Local development
+  - url: ${QUART_SERVER_URL}
+    description: Production Quart server
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Service is healthy
+
+  /api/ai/chat:
+    post:
+      summary: AI Chat endpoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - bot_id
+                - user_id
+                - topic
+                - user_nickname
+              properties:
+                bot_id:
+                  type: string
+                user_id:
+                  type: string
+                topic:
+                  type: string
+                user_nickname:
+                  type: string
+                is_direct:
+                  type: boolean
+                  default: false
+      responses:
+        '200':
+          description: AI response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  answer:
+                    type: string
+
+  /api/ai/history:
+    post:
+      summary: Get AI chat history
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - bot_id
+                - user_id
+                - user_nickname
+              properties:
+                bot_id:
+                  type: string
+                user_id:
+                  type: string
+                user_nickname:
+                  type: string
+      responses:
+        '200':
+          description: Chat history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  messages:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        role:
+                          type: string
+                        content:
+                          type: string
+                        created_at:
+                          type: string
+
+  /api/ai/search:
+    post:
+      summary: Semantic search
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - bot_id
+                - topic
+              properties:
+                bot_id:
+                  type: string
+                topic:
+                  type: string
+                top_k:
+                  type: integer
+                  default: 10
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  context:
+                    type: array
+                    items:
+                      type: string
+
+  /llm/chat:
+    post:
+      summary: Direct LLM chat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - system
+                - user
+              properties:
+                system:
+                  type: string
+                user:
+                  type: string
+                response_format:
+                  type: object
+      responses:
+        '200':
+          description: LLM response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  choices:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: object
+                          properties:
+                            content:
+                              type: string
+
+  /internal/ai/history:
+    post:
+      summary: Internal AI history (local network)
+      security:
+        - InternalToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                bot_id:
+                  type: string
+                user_id:
+                  type: string
+                user_nickname:
+                  type: string
+      responses:
+        '200':
+          description: Chat history
+
+components:
+  securitySchemes:
+    InternalToken:
+      type: apiKey
+      in: header
+      name: X-Internal-Token

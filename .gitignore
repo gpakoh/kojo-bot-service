@@ -1,0 +1,14 @@
+*.bak
+*.pyc
+__pycache__/
+*.log
+.env
+.env.local
+.env.*.local
+docker/.env
+bot_persistence.pickle
+config/config.json
+cache/
+.DS_Store
+*.swp
+*.swo
