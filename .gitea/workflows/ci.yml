@@ -9,6 +9,11 @@ on:
       - "chore/**"
       - "docs/**"
       - "ci/**"
+      - "revert/**"
+      - "hotfix/**"
+      - "release/**"
+      - "test/**"
+      - "refactor/**"
   pull_request:
     branches:
       - main
