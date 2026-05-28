@@ -2,8 +2,8 @@
 
 ## v0.1.1 (2026-05-28) — Hardening Release
 
-**Commit:** `17c7841`  
-**Tag hash:** _(создаётся)_
+**Commit:** `340f7c5`  
+**Tag hash:** `68b36d3832ab4a524ca3352a18f9f75f6f9dea81`
 
 ### Что включено
 
@@ -21,6 +21,8 @@
   - Fix миграций: sequence creation, `postgresql.JSONB`, `DROP CONSTRAINT IF EXISTS`
   - Docker build, compose config, alembic upgrade — проходят
 - **DB backup/restore runbook** — `docs/DB_BACKUP_RESTORE.md`
+- **CI fix: container image вместо `setup-python`** — `actions/setup-python@v5` не работает
+  в Gitea Actions (act_runner), перешли на `nikolaik/python-nodejs:python3.12-nodejs24`
 - **pytest**: 1471 passed, 0 failed
 - **mypy**: 0 issues
 - **compileall**: clean
