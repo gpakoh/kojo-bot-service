@@ -18,7 +18,7 @@ Dockerfile копирует его как `requirements.txt` и ставит ч�
 docker build -f docker/Dockerfile -t kojo-bot .
 ```
 
-## Run with docker compose
+## Run with docker compose (production)
 
 ```bash
 cd docker
@@ -27,10 +27,24 @@ cp .env.example ../.env     # создать .env из примера
 docker compose up -d
 ```
 
+## Local smoke test (development)
+
+```bash
+docker build -f docker/Dockerfile -t kojo-bot:smoke .
+cp .env.example .env
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.local.yml --env-file .env up -d
+docker exec RAG_kojo-db pg_isready -U kojo_user -d kojo_db  # ждать готовности
+docker run --rm --network docker_kojo_local \
+  -e DATABASE_URL=postgresql+asyncpg://kojo_user:kojo_password@RAG_kojo-db:5432/kojo_db \
+  kojo-bot:smoke alembic upgrade head
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.local.yml down
+```
+
 ## Required env files
 
 - `.env` — основной файл (в корне проекта)
 - `docker/.env.example` — пример для Docker-деплоя
+- `.env.example` — пример для локальной разработки
 
 ## Verification
 

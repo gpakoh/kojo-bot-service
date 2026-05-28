@@ -7,6 +7,7 @@ Create Date: 2026-04-26
 """
 
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
@@ -22,10 +23,10 @@ def upgrade() -> None:
         sa.Column('id', sa.BigInteger(), primary_key=True, autoincrement=True),
         sa.Column('stream_id', sa.String(255), nullable=False, index=True),
         sa.Column('event_type', sa.String(100), nullable=False),
-        sa.Column('payload', sa.JSONB, nullable=False),
+        sa.Column('payload', postgresql.JSONB, nullable=False),
         sa.Column('version', sa.Integer(), nullable=False),
         sa.Column('created_at', sa.TIMESTAMP(timezone=True), server_default=sa.text('NOW()'), nullable=False),
-        sa.Column('metadata', sa.JSONB),
+        sa.Column('metadata', postgresql.JSONB),
     )
 
     # Composite Index For Stream Replay

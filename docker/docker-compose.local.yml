@@ -1,0 +1,39 @@
+# Локальный Docker Compose override для разработки и smoke-тестов.
+# Использовать вместе с docker-compose.yml:
+#   docker compose -f docker/docker-compose.yml -f docker/docker-compose.local.yml up -d
+#
+# Отключает production-специфичные сети и volume-требования.
+
+services:
+  RAG_kojo_bot:
+    networks:
+      - kojo_local
+    ports:
+      - "${BOT_INTERNAL_PORT:-8080}:${BOT_INTERNAL_PORT:-8080}"
+
+  RAG_kojo-db:
+    networks:
+      - kojo_local
+    volumes:
+      - kojo_postgres_data_local:/var/lib/postgresql/data
+
+  RAG_kojo-redis:
+    container_name: RAG_kojo-redis
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - kojo_local
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  kojo_postgres_data_local:
+
+networks:
+  kojo_local:
+    driver: bridge
