@@ -12,6 +12,9 @@ from tg_bot.infrastructure.metrics import REGISTRY
 
 logger = logging.getLogger(__name__)
 
+DB_POOL_KEY: web.AppKey[Any] = web.AppKey("db_pool")
+REDIS_KEY: web.AppKey[Any] = web.AppKey("redis")
+
 
 async def health_handler(request: web.Request) -> web.Response:
     """Liveness probe — process is alive."""
@@ -23,7 +26,7 @@ async def ready_handler(request: web.Request) -> web.Response:
     checks: dict[str, bool] = {}
 
     # Check DB
-    pool = request.app.get("db_pool")
+    pool = request.app.get(DB_POOL_KEY)
     if pool:
         try:
             async with pool.acquire() as conn:
@@ -35,7 +38,7 @@ async def ready_handler(request: web.Request) -> web.Response:
         checks["db"] = False
 
     # Check Redis (if Configured)
-    redis = request.app.get("redis")
+    redis = request.app.get(REDIS_KEY)
     if redis:
         try:
             await redis.ping()
@@ -65,8 +68,8 @@ async def metrics_handler(request: web.Request) -> web.Response:
 
 def create_health_app(db_pool: Any = None, redis: Any = None) -> web.Application:
     app = web.Application()
-    app["db_pool"] = db_pool
-    app["redis"] = redis
+    app[DB_POOL_KEY] = db_pool
+    app[REDIS_KEY] = redis
     app.router.add_get("/health", health_handler)
     app.router.add_get("/ready", ready_handler)
     app.router.add_get("/metrics", metrics_handler)
