@@ -42,7 +42,7 @@ class TestRateLimitMiddleware:
         for _ in range(5):
             limited, msg = mw.check(mock_update, "callback")
             assert limited is False
-        
+
         # 6th Call Should Be Blocked
         limited, msg = mw.check(mock_update, "callback")
         assert limited is True

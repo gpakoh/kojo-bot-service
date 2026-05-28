@@ -2,8 +2,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from telegram import Update
-from telegram.ext import ContextTypes, ConversationHandler
+from telegram.ext import ConversationHandler
 
 from tg_bot.handlers.registration import (
     AWAITING_EMAIL,
@@ -16,11 +15,7 @@ from tg_bot.handlers.registration import (
     received_fio,
     received_phone,
     registration_handler,
-    show_main_menu_from_welcome,
-    show_staff_main_menu,
-    show_unauthorized_gate,
     start,
-    start_fio_step,
 )
 from tg_bot.models import UserStatus
 

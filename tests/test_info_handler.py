@@ -1,5 +1,4 @@
 """Unit tests for tg_bot/handlers/info.py."""
-import pytest
 from telegram.ext import ConversationHandler
 
 

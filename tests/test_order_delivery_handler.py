@@ -3,8 +3,7 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from telegram import Update
-from telegram.ext import ContextTypes, ConversationHandler
+from telegram.ext import ConversationHandler
 
 from tg_bot.handlers.order_delivery_checkout import (
     check_webapp_choice,

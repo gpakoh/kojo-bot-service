@@ -1,9 +1,7 @@
+import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
-
-import logging
 
 logger = logging.getLogger("databases.kojo.tests.test_graceful_shutdown")
 

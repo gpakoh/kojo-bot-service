@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from telegram import Update
-from telegram.ext import ContextTypes
 
 from tg_bot.models import UserStatus
 
@@ -17,8 +16,8 @@ def _make_user_service():
 patch("tg_bot.decorators.get_from_context", return_value=_make_user_service()).start()
 
 from tg_bot.handlers.ai_chat import (
-    handle_back_to_router,
     handle_ai_history,
+    handle_back_to_router,
     handle_router_ask_ai,
     handle_router_support,
     start_ai_chat,

@@ -5,8 +5,9 @@ Revises: 004_event_store
 Create Date: 2026-05-07
 
 """
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = '005_tenant_rls'
 down_revision = '004_event_store'
