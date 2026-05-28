@@ -1,5 +1,46 @@
 # Kojo Bot Service — Releases
 
+## Post-v0.1.1 Operational Fixes (2026-05-29)
+
+**Base tag:** `v0.1.1` (unchanged — no new release tag)
+
+### CI Trigger Expansion
+
+- **Operational branch prefixes added** to `.gitea/workflows/ci.yml` push triggers:
+  - `revert/**`, `hotfix/**`, `release/**`, `test/**`, `refactor/**`
+- Previously only `main`, `feature/**`, `fix/**`, `chore/**`, `docs/**`, `ci/**`
+- **Docs updated**: `DEVELOPMENT_FLOW.md` branch prefix table (10 prefixes) + agent note about missing trigger fallback
+
+### Verified via PR #13 (`revert/test-ci-trigger`)
+
+| Check | Result |
+|-------|--------|
+| push trigger (`revert/`) | ✅ green |
+| pull_request trigger (`revert/` → `main`) | ✅ green |
+| main trigger | ✅ green |
+| PR merge with both CI checks | ✅ без снятия branch protection |
+
+CI теперь работает для `revert/` веток без необходимости временно отключать branch protection.
+
+### GitHub Mirror Sync Runbook
+
+- `git push github main` иногда ошибочно сообщает `Everything up-to-date`
+- Задокументирован **explicit SHA push** как надёжный метод:
+  ```bash
+  HEAD_SHA="$(git rev-parse HEAD)"
+  git push github "${HEAD_SHA}:main"
+  ```
+- Force push запрещён без отдельного подтверждения
+
+### Cleanup
+
+- 7 stale remote-веток удалены (все от merged PRs #7–#13)
+- Ветка `ci/branch-triggers-and-docs` (PR #12) и `revert/test-ci-trigger` (PR #13) удалены после merge
+
+### No production code changes
+
+- Только `.gitea/workflows/ci.yml` (триггеры) и `docs/` — production-код не менялся
+
 ## v0.1.1 (2026-05-28) — Hardening Release
 
 **Commit:** `340f7c5`  
