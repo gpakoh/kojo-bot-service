@@ -15,7 +15,7 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: kojo
     container:
       image: nikolaik/python-nodejs:python3.12-nodejs24
 
