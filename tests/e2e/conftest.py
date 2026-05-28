@@ -5,7 +5,8 @@ import pytest
 from telegram import Update, User
 from telegram.ext import ContextTypes
 
-from tg_bot.models import User as UserModel, UserStatus
+from tg_bot.models import User as UserModel
+from tg_bot.models import UserStatus
 
 
 @pytest.fixture

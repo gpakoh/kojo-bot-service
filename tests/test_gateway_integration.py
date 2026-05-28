@@ -139,8 +139,8 @@ class TestGatewayIntegration:
 
 
 import httpx
+
 from services.gateway.client import (
-    AIChatRequest,
     AIHistoryRequest,
     AISearchRequest,
 )

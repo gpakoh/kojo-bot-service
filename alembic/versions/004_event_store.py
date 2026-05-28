@@ -5,9 +5,10 @@ Revises: 001_initial, 002_indexes, 003_missing_tables
 Create Date: 2026-04-26
 
 """
-from alembic import op
+
 import sqlalchemy as sa
-from typing import Any, Optional
+
+from alembic import op
 
 revision = '004_event_store'
 down_revision = ('001_initial', '002_indexes', '003_missing_tables')
@@ -26,13 +27,13 @@ def upgrade() -> None:
         sa.Column('created_at', sa.TIMESTAMP(timezone=True), server_default=sa.text('NOW()'), nullable=False),
         sa.Column('metadata', sa.JSONB),
     )
-    
+
     # Composite Index For Stream Replay
     op.create_index('idx_event_store_stream_version', 'event_store', ['stream_id', 'version'])
-    
+
     # Index For Event Type Queries (projections)
     op.create_index('idx_event_store_type_created', 'event_store', ['event_type', 'created_at'])
-    
+
     # Index For Analytics Queries
     op.create_index('idx_event_store_created', 'event_store', ['created_at'])
 

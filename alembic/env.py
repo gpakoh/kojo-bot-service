@@ -1,13 +1,11 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 
 # Import Metadata From Tables.py For Autogenerate Support
 from tg_bot.bot_services.tables import metadata as target_metadata
-from typing import Any, Optional
 
 # This Is The Alembic Config Object, Which Provides
 # Access To The Values Within The .ini File In Use.

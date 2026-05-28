@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from telegram import CallbackQuery, Message, Update
-from telegram.ext import ContextTypes
 
 from tg_bot.domain.order import OrderStatus as DomainOrderStatus
 from tg_bot.handlers.admin_panel import (
@@ -25,7 +24,6 @@ from tg_bot.handlers.admin_panel import (
     toggle_auto_approve,
 )
 from tg_bot.models import UserRole, UserStatus
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

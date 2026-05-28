@@ -154,8 +154,8 @@ class TestOrderRepositoryContract:
             OrderRepository()
 
     def test_all_abstract_methods_exist(self) -> None:
+
         from tg_bot.domain.order_repository import OrderRepository
-        import inspect
         abstract_methods = [
             'create', 'get_by_id', 'get_by_id_with_items', 'get_orders_by_user_id',
             'get_by_user_id_with_clear_check', 'get_by_user_id_after_timestamp',

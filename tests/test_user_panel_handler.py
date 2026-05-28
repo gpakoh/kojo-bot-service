@@ -4,9 +4,8 @@ from datetime import datetime
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
-from telegram import CallbackQuery, Message, Update
+from telegram import CallbackQuery, Message
 from telegram.constants import ParseMode
-from telegram.ext import ContextTypes
 
 # The @auth_guard() Decorator Fires At Module-import Time. We Must Replace
 # The Function At The *source* (tg_bot.decorators) *before* User_panel Is
@@ -40,9 +39,8 @@ try:
         start_order_rating,
     )
     from tg_bot.keyboards import (
-        CB_CLOSE_GENERIC,
-        CB_PREFIX_ADDR_DEL,
         CB_PREFIX_ADDR_DEF,
+        CB_PREFIX_ADDR_DEL,
         CB_PREFIX_ADDR_VIEW,
         CB_PREFIX_USER_CONTACT_SUPPORT,
         CB_PREFIX_USER_ORDER_DETAILS,

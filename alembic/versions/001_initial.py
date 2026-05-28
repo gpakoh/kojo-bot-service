@@ -1,14 +1,15 @@
 """Initial schema migration
 
 Revision ID: 001_initial
-Revises: 
+Revises: ''
 Create Date: 2026-04-26
 
 """
-from alembic import op
+
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
-from typing import Any, Optional
+
+from alembic import op
 
 revision = '001_initial'
 down_revision = None
@@ -142,6 +143,6 @@ def downgrade() -> None:
     op.drop_table('product_variants')
     op.drop_table('products')
     op.drop_table('sync_metadata')
-    
+
     op.execute('DROP EXTENSION IF EXISTS "pg_trgm"')
     op.execute('DROP EXTENSION IF EXISTS "uuid-ossp"')

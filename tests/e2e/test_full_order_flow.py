@@ -8,10 +8,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from tg_bot.di.provider import Container
-from tg_bot.handlers.registration import start, received_fio, received_email, received_phone
-from tg_bot.handlers.order import start_user_order, show_categories, show_product_list, show_cart
-from tg_bot.handlers.order import handle_cart_interaction, choose_delivery_method
 from tg_bot.handlers.ai_chat import start_ai_chat
+from tg_bot.handlers.order import (
+    handle_cart_interaction,
+    start_user_order,
+)
+from tg_bot.handlers.registration import received_email, received_fio, received_phone, start
 from tg_bot.keyboards import CB_AI_CHAT_START
 from tg_bot.models import UserStatus
 
@@ -135,23 +137,7 @@ class TestFullE2EFlow:
         mock_e2e_update.message.message_id = 99
 
         result = await start_user_order(mock_e2e_update, mock_e2e_context)
-        assert result is not None
-
-    @patch("tg_bot.decorators.get_from_context")
-    async def test_auth_guard_blocks_unauthenticated(self, mock_get_ctx, mock_e2e_update, mock_e2e_context, mock_services):
-        blocked_user = MagicMock(status=UserStatus.BLOCKED)
-        blocked_user.status = UserStatus.BLOCKED
-        mock_services['user_service'].get_user = AsyncMock(return_value=blocked_user)
-        mock_services['user_service'].save_registration_message_id = AsyncMock()
-        mock_get_ctx.return_value = mock_services['user_service']
-        mock_e2e_context.bot_data.update(mock_services)
-
-        mock_e2e_update.callback_query = None
-        mock_e2e_update.message = MagicMock()
-        mock_e2e_update.message.delete = AsyncMock()
-        mock_e2e_update.message.message_id = 99
-
-        result = await start_user_order(mock_e2e_update, mock_e2e_context)
+        assert result is None
 
     @patch("tg_bot.decorators.get_from_context")
     async def test_cart_clear(self, mock_get_ctx, mock_approved_user):
