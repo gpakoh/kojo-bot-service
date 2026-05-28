@@ -1,5 +1,36 @@
 # Kojo Bot Service — Releases
 
+## v0.1.1 (2026-05-28) — Hardening Release
+
+**Commit:** `17c7841`  
+**Tag hash:** _(создаётся)_
+
+### Что включено
+
+- **CI на feature branches + pull_request** — триггеры исправлены:
+  - push → `feature/**`, `fix/**`, `chore/**`, `docs/**`, `ci/**`
+  - pull_request → `main`
+- **Branch protection contexts** — исправлены имена проверок:
+  - `Kojo CI / test (push)`
+  - `Kojo CI / test (pull_request)`
+- **Ruff debt reduction** — 97 → 15 errors (78 auto-fixed, 4 manual)
+- **Docker Compose smoke validation**:
+  - `.env.example`, `docker/.env.example`, `docker/docker-compose.local.yml` добавлены
+  - `Dockerfile` / `Dockerfile.multistage`: COPY `alembic/` вместо `migrations/`
+  - `alembic/env.py`: async engine + `DATABASE_URL` override
+  - Fix миграций: sequence creation, `postgresql.JSONB`, `DROP CONSTRAINT IF EXISTS`
+  - Docker build, compose config, alembic upgrade — проходят
+- **DB backup/restore runbook** — `docs/DB_BACKUP_RESTORE.md`
+- **pytest**: 1471 passed, 0 failed
+- **mypy**: 0 issues
+- **compileall**: clean
+
+### Known remaining debt
+
+- 15 ruff errors (зафиксированы, не блокируют CI):
+  - 9× E402 — intentional late imports в тестах
+  - 6× E501 — длинные строки в миграциях и тестовых сигнатурах
+
 ## v0.1.0 (2026-05-28)
 
 **Commit:** `3c1c9677efbe20a7c2292cc209c5e0f518133ce7`  
