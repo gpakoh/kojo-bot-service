@@ -28,6 +28,14 @@ def upgrade() -> None:
         sa.Column('last_synced_at', sa.TIMESTAMP(timezone=True), server_default=sa.text('NOW()')),
     )
 
+    op.execute('CREATE SEQUENCE IF NOT EXISTS products_id_seq')
+    op.execute('CREATE SEQUENCE IF NOT EXISTS product_variants_id_seq')
+    op.execute('CREATE SEQUENCE IF NOT EXISTS users_id_seq')
+    op.execute('CREATE SEQUENCE IF NOT EXISTS orders_id_seq')
+    op.execute('CREATE SEQUENCE IF NOT EXISTS order_items_id_seq')
+    op.execute('CREATE SEQUENCE IF NOT EXISTS communication_threads_id_seq')
+    op.execute('CREATE SEQUENCE IF NOT EXISTS thread_messages_id_seq')
+
     op.create_table(
         'products',
         sa.Column('id', sa.Integer(), primary_key=True, server_default=sa.text('nextval(\'products_id_seq\')')),
@@ -144,5 +152,12 @@ def downgrade() -> None:
     op.drop_table('products')
     op.drop_table('sync_metadata')
 
+    op.execute('DROP SEQUENCE IF EXISTS thread_messages_id_seq')
+    op.execute('DROP SEQUENCE IF EXISTS communication_threads_id_seq')
+    op.execute('DROP SEQUENCE IF EXISTS order_items_id_seq')
+    op.execute('DROP SEQUENCE IF EXISTS orders_id_seq')
+    op.execute('DROP SEQUENCE IF EXISTS users_id_seq')
+    op.execute('DROP SEQUENCE IF EXISTS product_variants_id_seq')
+    op.execute('DROP SEQUENCE IF EXISTS products_id_seq')
     op.execute('DROP EXTENSION IF EXISTS "pg_trgm"')
     op.execute('DROP EXTENSION IF EXISTS "uuid-ossp"')

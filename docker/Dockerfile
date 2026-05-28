@@ -18,7 +18,7 @@ COPY utils ./utils
 COPY tg_bot ./tg_bot
 COPY services ./services
 COPY config ./config
-COPY migrations ./migrations
+COPY alembic ./alembic
 COPY alembic.ini .
 COPY pyproject.toml .
 

@@ -37,15 +37,15 @@ def upgrade() -> None:
     op.create_unique_constraint('uq_users_tenant_telegram', 'users', ['tenant_id', 'telegram_id'])
 
     # Products: (tenant_id, Name)
-    op.drop_constraint('products_name_key', 'products', type_='unique')
+    op.execute('ALTER TABLE products DROP CONSTRAINT IF EXISTS products_name_key')
     op.create_unique_constraint('uq_products_tenant_name', 'products', ['tenant_id', 'name'])
 
     # Settings: (tenant_id, Key)
-    op.drop_constraint('settings_key_key', 'settings', type_='unique')
+    op.execute('ALTER TABLE settings DROP CONSTRAINT IF EXISTS settings_key_key')
     op.create_unique_constraint('uq_settings_tenant_key', 'settings', ['tenant_id', 'key'])
 
     # Bot_settings: (tenant_id, Key)
-    op.drop_constraint('bot_settings_key_key', 'bot_settings', type_='unique')
+    op.execute('ALTER TABLE bot_settings DROP CONSTRAINT IF EXISTS bot_settings_key_key')
     op.create_unique_constraint('uq_bot_settings_tenant_key', 'bot_settings', ['tenant_id', 'key'])
 
     # 3. Enable RLS
