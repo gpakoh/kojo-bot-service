@@ -18,7 +18,14 @@
 
 All changes must go through a feature branch and pull request.
 
+## CI triggers
 
+Gitea Actions runs the `test` job on:
+
+- **push** to any branch matching `main`, `feature/**`, `fix/**`, `chore/**`, `docs/**`, `ci/**`
+- **pull_request** targeting `main`
+
+This means CI runs automatically on feature branches before a PR is created, and again when a PR is opened or updated.
 
 ## Branch model: trunk-based
 

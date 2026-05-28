@@ -2,7 +2,16 @@ name: Kojo CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - "feature/**"
+      - "fix/**"
+      - "chore/**"
+      - "docs/**"
+      - "ci/**"
+  pull_request:
+    branches:
+      - main
 
 jobs:
   test:
