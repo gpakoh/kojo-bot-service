@@ -1,63 +1,63 @@
 # Tg_bot/bot_services/user_service.py
-from typing import Any, Optional
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator, Optional
 
 import asyncpg
 
 from tg_bot.models import User, UserRole, UserStatus
+from tg_bot.tenant.config import get_current_tenant
 from utils.logging_setup import logger
 
 
-# Низкоуровневые sql-запросы
-async def _get_user_by_telegram_id(pool: asyncpg.Pool, telegram_id: int) -> Optional[User]:
-    async with pool.acquire() as connection:
-        row = await connection.fetchrow("SELECT * FROM users WHERE telegram_id = $1", telegram_id)
-        if row:
-            return User(**dict(row))
-        return None
-
-async def _create_user(pool: asyncpg.Pool, telegram_id: int, fio: str, phone: str, email: str) -> User:
-    async with pool.acquire() as connection:
-        # Добавлен email в запрос
-        row = await connection.fetchrow(
-            """
-            INSERT INTO users (telegram_id, fio, phone, email, status, role)
-            VALUES ($1, $2, $3, $4, $5, $6) RETURNING *
-            """,
-            telegram_id, fio, phone, email, UserStatus.PENDING.value, UserRole.USER.value
-        )
-        return User(**dict(row))
-
-async def _update_user_status(pool: asyncpg.Pool, telegram_id: int, status: UserStatus) -> Optional[User]:
-    async with pool.acquire() as connection:
-        row = await connection.fetchrow(
-            "UPDATE users SET status = $1 WHERE telegram_id = $2 RETURNING *",
-            status.value, telegram_id
-        )
-        if row:
-            return User(**dict(row))
-        return None
-
 # Высокоуровневый сервис
 class UserService:
-    def __init__(self, pool: asyncpg.Pool) -> None:
+    def __init__(self, pool: asyncpg.Pool, db_manager: Any = None) -> None:
         self.pool = pool
+        self.db_manager = db_manager
+
+    @asynccontextmanager
+    async def _connection(self) -> AsyncIterator[Any]:
+        tenant = get_current_tenant()
+        tenant_id = getattr(tenant, "bot_id", None) if tenant else None
+
+        if self.db_manager is not None and tenant_id:
+            async with self.db_manager.tenant_connection(tenant_id) as conn:
+                yield conn
+            return
+
+        async with self.pool.acquire() as conn:
+            yield conn
 
     async def get_user(self, telegram_id: int) -> Optional[User]:
         """Получает пользователя по его Telegram ID."""
-        return await _get_user_by_telegram_id(self.pool, telegram_id)
+        async with self._connection() as connection:
+            row = await connection.fetchrow("SELECT * FROM users WHERE telegram_id = $1", telegram_id)
+            if row:
+                return User(**dict(row))
+            return None
 
     async def approve_user(self, telegram_id: int, moderator_id: int) -> Optional[User]:
         user = await self.get_user(telegram_id)
         if user and user.status == UserStatus.PENDING:
             logger.info(f"Модератор {moderator_id} одобряет пользователя {telegram_id}.")
-            return await _update_user_status(self.pool, telegram_id, UserStatus.APPROVED)
+            async with self._connection() as conn:
+                row = await conn.fetchrow(
+                    "UPDATE users SET status = $1 WHERE telegram_id = $2 RETURNING *",
+                    UserStatus.APPROVED.value, telegram_id
+                )
+                return User(**dict(row)) if row else None
         return None
 
     async def decline_user(self, telegram_id: int, moderator_id: int) -> Optional[User]:
         user = await self.get_user(telegram_id)
         if user and user.status == UserStatus.PENDING:
             logger.info(f"Модератор {moderator_id} отклоняет пользователя {telegram_id}.")
-            return await _update_user_status(self.pool, telegram_id, UserStatus.BLOCKED)
+            async with self._connection() as conn:
+                row = await conn.fetchrow(
+                    "UPDATE users SET status = $1 WHERE telegram_id = $2 RETURNING *",
+                    UserStatus.BLOCKED.value, telegram_id
+                )
+                return User(**dict(row)) if row else None
         return None
 
     def is_admin(self, user: Optional[User], admin_ids: list[int]) -> bool:
@@ -78,15 +78,16 @@ class UserService:
         """Создает нового пользователя со статусом 'approved' и ролью 'admin'."""
         logger.info(f"Создание одобренного администратора в БД для telegram_id={telegram_id}")
 
-        await self.pool.execute(
-            """
-            INSERT INTO users (telegram_id, fio, phone, email, role, status)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            ON CONFLICT (telegram_id) DO UPDATE SET
-            role = EXCLUDED.role, status = EXCLUDED.status;
-            """,
-            telegram_id, fio, phone, email, UserRole.ADMIN.value, UserStatus.APPROVED.value
-        )
+        async with self._connection() as conn:
+            await conn.execute(
+                """
+                INSERT INTO users (telegram_id, fio, phone, email, role, status)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                ON CONFLICT (telegram_id) DO UPDATE SET
+                role = EXCLUDED.role, status = EXCLUDED.status;
+                """,
+                telegram_id, fio, phone, email, UserRole.ADMIN.value, UserStatus.APPROVED.value
+            )
 
     async def get_users_by_criteria(self, role: UserRole | None = None, status: UserStatus | None = None) -> list[User]:
         """
@@ -111,7 +112,7 @@ class UserService:
 
         query += " ORDER BY fio;"
 
-        async with self.pool.acquire() as connection:
+        async with self._connection() as connection:
             rows = await connection.fetch(query, *params)
 
         users = [User(**dict(row)) for row in rows]
@@ -121,7 +122,7 @@ class UserService:
 
     async def get_user_by_db_id(self, db_id: int) -> Optional[User]:
         """Получает пользователя по его первичному ключу (ID) из базы данных."""
-        async with self.pool.acquire() as connection:
+        async with self._connection() as connection:
             row = await connection.fetchrow("SELECT * FROM users WHERE id = $1", db_id)
             if row:
                 return User(**dict(row))
@@ -131,7 +132,7 @@ class UserService:
     async def update_user_role(self, db_id: int, new_role: UserRole) -> Optional[User]:
         """Обновляет роль пользователя по его ID в базе."""
         logger.info(f"Обновление роли для пользователя с ID={db_id} на '{new_role.value}'")
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             row = await conn.fetchrow(
                 "UPDATE users SET role = $1 WHERE id = $2 RETURNING *",
                 new_role.value, db_id
@@ -141,7 +142,7 @@ class UserService:
     async def update_user_status_by_db_id(self, db_id: int, new_status: UserStatus) -> Optional[User]:
         """Обновляет статус пользователя по его ID в базе."""
         logger.info(f"Обновление статуса для пользователя с ID={db_id} на '{new_status.value}'")
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             # При разблокировке также сбрасываем роль на 'user'
             if new_status == UserStatus.APPROVED:
                 row = await conn.fetchrow(
@@ -161,7 +162,7 @@ class UserService:
         logger.info(f"Запись регистрации для {telegram_id}: {fio}, {phone}")
         new_status = UserStatus.APPROVED.value if auto_approve else UserStatus.PENDING.value
 
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             row = await conn.fetchrow(
                 """
                 INSERT INTO users (telegram_id, fio, phone, email, status, role, created_at, updated_at)
@@ -186,7 +187,7 @@ class UserService:
         История (заказы) сохраняется в БД, привязанная к telegram_id, но отсекается по дате.
         """
         logger.info(f"Выход и сброс данных пользователя {telegram_id}. Очистка данных: {clear_data}")
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             if clear_data:
                 # Оборачиваем в транзакцию для надежного каскадного удаления
                 async with conn.transaction():
@@ -228,7 +229,7 @@ class UserService:
         Нужно для того, чтобы бот мог отредактировать его после одобрения админом.
         """
         logger.info(f"Сохранение registration_message_id={message_id} для пользователя {telegram_id}")
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             await conn.execute(
                 "UPDATE users SET registration_message_id = $1 WHERE telegram_id = $2",
                 message_id, telegram_id
@@ -245,7 +246,7 @@ class UserService:
             f"GDPR anonymization requested for telegram_id={telegram_id} "
             f"by moderator={requested_by}"
         )
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             async with conn.transaction():
                 row = await conn.fetchrow(
                     "SELECT id FROM users WHERE telegram_id = $1",
