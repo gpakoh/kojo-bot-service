@@ -336,7 +336,7 @@ async def post_init(app: Application) -> Any:
 
     app.bot_data['settings_service'] = SettingsService(pool)
     app.bot_data['cart_service'] = CartService(pool, db_manager=db_manager)
-    app.bot_data['info_service'] = InfoService(pool)
+    app.bot_data['info_service'] = InfoService(pool, db_manager=db_manager)
 
     # Вставить после инициализации info_service
     # Create Gatewayclient For AI Communication With Circuit Breaker + HMAC
