@@ -1,19 +1,36 @@
 # Tg_bot/bot_services/user_address_service.py
 import logging
-from typing import Any, List, Optional, cast
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator, List, Optional, cast
 
 import asyncpg
+
+from tg_bot.tenant.config import get_current_tenant
 
 logger = logging.getLogger(__name__)
 
 class UserAddressService:
-    def __init__(self, pool: asyncpg.Pool) -> None:
+    def __init__(self, pool: asyncpg.Pool, db_manager: Any = None) -> None:
         self.pool = pool
+        self.db_manager = db_manager
         logger.info("Useraddressservice инициализирован.")
+
+    @asynccontextmanager
+    async def _connection(self) -> AsyncIterator[Any]:
+        tenant = get_current_tenant()
+        tenant_id = getattr(tenant, "bot_id", None) if tenant else None
+
+        if self.db_manager is not None and tenant_id:
+            async with self.db_manager.tenant_connection(tenant_id) as conn:
+                yield conn
+            return
+
+        async with self.pool.acquire() as conn:
+            yield conn
 
     async def init_table(self) -> Any:
         """Создает таблицу адресов, если она не существует."""
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS user_saved_addresses (
                     id SERIAL PRIMARY KEY,
@@ -34,7 +51,7 @@ class UserAddressService:
         """Добавляет адрес. Если это первый адрес провайдера - делает его дефолтным."""
         provider = 'cdek' if 'cdek' in provider else 'yandex' # Нормализация
 
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             # Проверяем, есть ли уже адреса этого типа
             count = await conn.fetchval(
                 "SELECT COUNT(*) FROM user_saved_addresses WHERE user_id = $1 AND provider = $2",
@@ -55,7 +72,7 @@ class UserAddressService:
 
     async def get_addresses(self, user_id: int, provider: str | None = None) -> List[dict[str, Any]]:
         """Получает список адресов пользователя."""
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             if provider:
                 provider = 'cdek' if 'cdek' in provider else 'yandex'
                 rows = await conn.fetch("""
@@ -74,7 +91,7 @@ class UserAddressService:
     async def get_default_address(self, user_id: int, provider: str) -> Optional[dict[str, Any]]:
         """Получает дефолтный адрес для конкретного провайдера."""
         provider = 'cdek' if 'cdek' in provider else 'yandex'
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             row = await conn.fetchrow("""
                 SELECT * FROM user_saved_addresses
                 WHERE user_id = $1 AND provider = $2 AND is_default = TRUE
@@ -84,7 +101,7 @@ class UserAddressService:
 
     async def set_default_address(self, user_id: int, address_id: int) -> Any:
         """Делает адрес дефолтным, снимая флаг с остальных адресов ТОГО ЖЕ провайдера."""
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             async with conn.transaction():
                 # 1. узнаем провайдера этого адреса
                 provider = await conn.fetchval("SELECT provider FROM user_saved_addresses WHERE id = $1", address_id)
@@ -103,7 +120,7 @@ class UserAddressService:
 
     async def delete_address(self, address_id: int, user_id: int) -> Any:
         """Удаляет адрес. Если он был дефолтным, пытается назначить новый дефолт."""
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             async with conn.transaction():
                 # Проверяем, был ли он дефолтным и какой провайдер
                 row = await conn.fetchrow("SELECT provider, is_default FROM user_saved_addresses WHERE id = $1 AND user_id = $2", address_id, user_id)
@@ -128,7 +145,7 @@ class UserAddressService:
 
     async def rename_address(self, address_id: int, user_id: int, new_name: str) -> Any:
         """Обновляет пользовательское название адреса."""
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             await conn.execute("""
                 UPDATE user_saved_addresses
                 SET custom_name = $1
