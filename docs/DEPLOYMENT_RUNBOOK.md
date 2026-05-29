@@ -138,7 +138,14 @@ Alembic умеет откатывать одну миграцию: `docker compo
 
 Процедура описана в отдельном документе: [docs/DB_BACKUP_RESTORE.md](DB_BACKUP_RESTORE.md).
 
-Основные команды:
+**Рекомендованный способ — скрипт `scripts/backup_db.sh`:**
+
+```bash
+KOJO_DATABASE_URL="postgresql://user:pass@host:5432/db" BACKUP_DIR=/var/backups/kojo \
+  ./scripts/backup_db.sh
+```
+
+**Через docker compose (альтернатива):**
 
 ```bash
 cd docker
