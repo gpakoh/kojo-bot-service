@@ -2,11 +2,13 @@
 import logging
 import re
 from datetime import datetime
-from typing import Any, Dict, List, Optional, TypedDict
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator, Dict, List, Optional, TypedDict
 
 import asyncpg
 
 from tg_bot.models import Product, Variant
+from tg_bot.tenant.config import get_current_tenant
 
 logger = logging.getLogger(__name__)
 
@@ -16,8 +18,9 @@ class _ScoredProduct(TypedDict):
 
 
 class ProductService:
-    def __init__(self, pool: asyncpg.Pool) -> None:
+    def __init__(self, pool: asyncpg.Pool, db_manager: Any = None) -> None:
         self.pool = pool
+        self.db_manager = db_manager
         self._category_tree_cache: Optional[dict[str, Any]] = None
         self._category_tree_updated: Optional[datetime] = None
         self._CACHE_TTL = 300
@@ -53,6 +56,19 @@ class ProductService:
                 products_map[product_id].variants.append(variant)
         return list(products_map.values())
 
+    @asynccontextmanager
+    async def _connection(self) -> AsyncIterator[Any]:
+        tenant = get_current_tenant()
+        tenant_id = getattr(tenant, "bot_id", None) if tenant else None
+
+        if self.db_manager is not None and tenant_id:
+            async with self.db_manager.tenant_connection(tenant_id) as conn:
+                yield conn
+            return
+
+        async with self.pool.acquire() as conn:
+            yield conn
+
     async def get_available_products(self, light_mode: bool = False) -> List[Product]:
         logger.info(f"⏳ [DB] Запрос продуктов (light={light_mode})...") # [LOG]
 
@@ -71,7 +87,7 @@ class ProductService:
         """
         try:
             # Добавил timeout 10 сек
-            async with self.pool.acquire() as conn:
+            async with self._connection() as conn:
                 records = await conn.fetch(query)
 
             logger.info(f"✅ [DB] Получено {len(records)} записей продуктов.") # [LOG]
@@ -92,7 +108,8 @@ class ProductService:
             WHERE p.id = $1 AND p.is_available = TRUE
         """
         try:
-            records = await self.pool.fetch(query, product_id)
+            async with self._connection() as conn:
+                records = await conn.fetch(query, product_id)
             logger.info(f"✅ [DB] Продукт {product_id} загружен.")
             if not records:
                 return None
@@ -111,7 +128,8 @@ class ProductService:
         logger.info("⏳ [db] строим дерево категорий...")
         query = """SELECT DISTINCT chapters FROM products WHERE is_available = TRUE AND chapters IS NOT NULL"""
         try:
-            records = await self.pool.fetch(query)
+            async with self._connection() as conn:
+                records = await conn.fetch(query)
             logger.info(f"✅ [DB] Дерево загружено ({len(records)} записей).")
 
             tree: dict[str, set[str]] = {}
@@ -260,7 +278,7 @@ class ProductService:
         all_found_products: dict[int, _ScoredProduct] = {}
 
         try:
-            async with self.pool.acquire() as conn:
+            async with self._connection() as conn:
                 for variant in variants:
                     # Коротким запросам нужен более строгий порог сходства, иначе шумит выдача.
                     if len(variant) <= 3:
@@ -326,7 +344,7 @@ class ProductService:
         variants = self._generate_search_variants(query_text)
         all_found_products = {}
 
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             for variant in variants:
                 words = [w for w in variant.split() if len(w) > 2]
                 if not words:
