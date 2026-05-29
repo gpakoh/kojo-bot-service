@@ -9,6 +9,7 @@ import asyncpg
 from telegram.ext import ContextTypes
 
 from tg_bot.di.unit_of_work import UnitOfWorkFactory, create_uow_factory
+from tg_bot.infrastructure.database import DatabaseManager
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,8 @@ class Container:
     Usage:
         # Registration (in Main.py Post_init)
         container = Container()
-        container.register_singleton(UserService, UserService(pool))
+        db_manager = container.db_manager
+        container.register_singleton(UserService, UserService(pool, db_manager=db_manager))
 
         # Injection (in Handlers)
         user_service = container.get_from_context(context, UserService)
@@ -81,6 +83,7 @@ class Container:
     def __init__(self) -> None:
         self._registry = ServiceRegistry()
         self._pool: Optional[asyncpg.Pool] = None
+        self._db_manager: Optional[DatabaseManager] = None
         self._uow_factory: Optional[UnitOfWorkFactory] = None
         self._initialized = False
 
@@ -95,8 +98,9 @@ class Container:
         return self
 
     def register_pool(self, pool: asyncpg.Pool) -> 'Container':
-        """Register database pool and create UnitOfWork factory."""
+        """Register database pool, create UnitOfWork factory and DatabaseManager."""
         self._pool = pool
+        self._db_manager = DatabaseManager(pool)
         self._uow_factory = create_uow_factory(pool)
         self._initialized = True
         logger.info("Container Initialized With Database Pool")
@@ -116,6 +120,13 @@ class Container:
         if self._pool is None:
             raise RuntimeError("Database pool not registered")
         return self._pool
+
+    @property
+    def db_manager(self) -> DatabaseManager:
+        """Get DatabaseManager for tenant-scoped connections and RLS."""
+        if self._db_manager is None:
+            raise RuntimeError("Database pool not registered — call register_pool() first")
+        return self._db_manager
 
     @property
     def uow(self) -> UnitOfWorkFactory:
