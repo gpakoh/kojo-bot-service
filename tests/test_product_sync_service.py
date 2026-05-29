@@ -70,3 +70,11 @@ price: 100"""
         test_file.write_text(content)
         result = parse_product_file(test_file)
         assert result['name'] == 'Временный товар'
+
+
+def test_product_sync_service_documents_raw_pool_bypass():
+    source = Path("tg_bot/bot_services/product_sync_service.py").read_text(encoding="utf-8")
+
+    assert "system-level catalog operation" in source
+    assert "raw pool instead of tenant-scoped connections" in source
+    assert "db_manager.tenant_connection" not in source
