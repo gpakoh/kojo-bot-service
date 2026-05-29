@@ -30,7 +30,7 @@
 
 ## 4. Обязательные переменные окружения
 
-Все переменные задаются в файле `.env` в корне проекта. Пример — `.env.example`.
+Все переменные задаются в файле `.env` в корне проекта. Полный перечень с описанием окружений (local/staging/production) — в [docs/ENVIRONMENTS.md](ENVIRONMENTS.md). Пример — `.env.example`.
 
 Обязательные:
 
@@ -183,6 +183,7 @@ Redis-backup не требуется — данные Redis восстанавл
 
 ## Ссылки
 
+- [docs/ENVIRONMENTS.md](ENVIRONMENTS.md) — матрица окружений local/staging/production
 - [docs/DB_BACKUP_RESTORE.md](DB_BACKUP_RESTORE.md) — backup/restore БД
 - [docs/DEVELOPMENT_FLOW.md](DEVELOPMENT_FLOW.md) — процесс разработки и CI
 - [docs/DOCKER_BOOTSTRAP.md](DOCKER_BOOTSTRAP.md) — сборка Docker-образа
