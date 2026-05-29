@@ -1,9 +1,12 @@
 # Tg_bot/bot_services/cart_service.py
 import logging
+from contextlib import asynccontextmanager
 from enum import Enum
-from typing import Any, Dict
+from typing import Any, AsyncIterator, Dict
 
 import asyncpg
+
+from tg_bot.tenant.config import get_current_tenant
 
 logger = logging.getLogger(__name__)
 
@@ -13,8 +16,22 @@ class CartValidationResult(Enum):
     ITEM_UNAVAILABLE = "item_unavailable" # Позиция недоступна (нельзя купить)
 
 class CartService:
-    def __init__(self, pool: asyncpg.Pool) -> None:
+    def __init__(self, pool: asyncpg.Pool, db_manager: Any = None) -> None:
         self.pool = pool
+        self.db_manager = db_manager
+
+    @asynccontextmanager
+    async def _connection(self) -> AsyncIterator[Any]:
+        tenant = get_current_tenant()
+        tenant_id = getattr(tenant, "bot_id", None) if tenant else None
+
+        if self.db_manager is not None and tenant_id:
+            async with self.db_manager.tenant_connection(tenant_id) as conn:
+                yield conn
+            return
+
+        async with self.pool.acquire() as conn:
+            yield conn
 
     async def update_item(self, user_id: int, product_id: int, quantity: int) -> Any:
         """
@@ -34,20 +51,20 @@ class CartService:
                 saved_price = (SELECT price FROM product_variants WHERE product_id = $2 LIMIT 1),
                 created_at = NOW()
         """
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             await conn.execute(query, user_id, product_id, quantity)
             logger.info(f"User {user_id}: обновлен товар {product_id}, кол-во {quantity}")
 
     async def remove_item(self, user_id: int, product_id: int) -> Any:
         """Удаляет конкретный товар из корзины."""
         query = "DELETE FROM cart_items WHERE user_id = $1 AND product_id = $2"
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             await conn.execute(query, user_id, product_id)
 
     async def clear_cart(self, user_id: int) -> Any:
         """Полная очистка корзины пользователя."""
         query = "DELETE FROM cart_items WHERE user_id = $1"
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             await conn.execute(query, user_id)
             logger.info(f"User {user_id}: корзина очищена")
 
@@ -69,7 +86,7 @@ class CartService:
             WHERE ci.user_id = $1
             ORDER BY ci.product_id, pv.price ASC
         """
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             rows = await conn.fetch(query, user_id)
 
         cart = {}
@@ -84,7 +101,7 @@ class CartService:
 
     async def is_cart_empty(self, user_id: int) -> bool:
         query = "SELECT EXISTS(SELECT 1 FROM cart_items WHERE user_id = $1)"
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             return not await conn.fetchval(query, user_id)
 
 
@@ -110,7 +127,7 @@ class CartService:
             WHERE ci.user_id = $1
         """
 
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             rows = await conn.fetch(query, user_id)
 
         if not rows:
