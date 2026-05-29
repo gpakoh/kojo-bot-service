@@ -674,7 +674,7 @@ async def main() -> None:
     TOKEN = SecretsLoader.get_required("BOT_TOKEN")
 
     # Сброс персистентности (если нужно)
-    persistence_path = Path("bot_persistence.pickle")
+    persistence_path = Path(os.getenv("BOT_PERSISTENCE_PATH", "/app/data/bot_persistence.pickle"))
     if os.environ.get("RESET_PERSISTENCE", "false").lower() == "true":
         if persistence_path.exists():
             try:
@@ -918,7 +918,7 @@ async def main() -> None:
     internal_port = SecretsLoader.get_int("BOT_INTERNAL_PORT", 8080)
     public_url = SecretsLoader.get("WEBHOOK_PUBLIC_URL")
     secret_token = SecretsLoader.get("WEBHOOK_SECRET_TOKEN")
-    logger.info(f"[DEBUG] WEBHOOK_PUBLIC_URL raw='{public_url}' len={len(public_url)}")
+    logger.info("[DEBUG] WEBHOOK_PUBLIC_URL configured=%s len=%s", bool(public_url), len(public_url or ""))
 
     if not public_url:
         logger.warning("⚠️ webhook_public_url не задан — бот работает в listener mode без публичного url")

@@ -31,11 +31,15 @@ class TestHMACIntegration:
         assert client.federation_secret == "test-secret"
 
     def test_hmac_header_present_with_payload(self) -> None:
-        """_get_headers includes X-Federation-Signature when payload is given."""
+        """_get_headers includes signature, timestamp, and nonce when payload is given."""
         client = GatewayClient("http://test.local", federation_secret="test-secret")
         headers = client._get_headers(payload=b'{"key":"value"}')
         assert "X-Federation-Signature" in headers
         assert len(headers["X-Federation-Signature"]) == 64  # SHA-256 hex digest
+        assert "X-Federation-Timestamp" in headers
+        assert headers["X-Federation-Timestamp"].isdigit()
+        assert "X-Federation-Nonce" in headers
+        assert len(headers["X-Federation-Nonce"]) >= 16
 
     def test_hmac_header_absent_without_secret(self) -> None:
         """_get_headers omits X-Federation-Signature when federation_secret is None."""
@@ -83,6 +87,10 @@ class TestGatewayClientCB:
         call_kwargs = mock_client.request.call_args[1]
         headers = call_kwargs.get("headers", {})
         assert "X-Federation-Signature" in headers
+        assert "X-Federation-Timestamp" in headers
+        assert headers["X-Federation-Timestamp"].isdigit()
+        assert "X-Federation-Nonce" in headers
+        assert len(headers["X-Federation-Nonce"]) >= 16
         assert "X-Request-ID" in headers
 
 
@@ -276,18 +284,15 @@ class TestAICommunicationServiceGatewayPath:
         result = asyncio.run(run())
         assert result["status"] == "indexing"
 
-    def test_fallback_to_quart_circuit_open_fallback(self) -> None:
-        """CircuitOpenError falls back to http_middleware."""
+    def test_fallback_to_quart_circuit_open_returns_unavailable(self) -> None:
+        """CircuitOpenError returns unavailable, does not use legacy middleware."""
         from services.gateway.circuit_breaker import CircuitOpenError
 
         mock_gateway = MagicMock()
         mock_gateway._request = AsyncMock(side_effect=CircuitOpenError("test"))
 
-        mock_middleware_response = MagicMock()
-        mock_middleware_response.status_code = 200
-        mock_middleware_response.json.return_value = {"answer": "Middleware answer"}
         mock_middleware = MagicMock()
-        mock_middleware.post = AsyncMock(return_value=mock_middleware_response)
+        mock_middleware.post = AsyncMock()
 
         service = AICommunicationService(
             quart_url="http://quart:5000",
@@ -302,8 +307,8 @@ class TestAICommunicationServiceGatewayPath:
             )
 
         result = asyncio.run(run())
-        assert result["answer"] == "Middleware answer"
-        mock_middleware.post.assert_awaited_once()
+        assert result == {"answer": "⚠️ Сервис временно недоступен."}
+        mock_middleware.post.assert_not_called()
 
     def test_semantic_retrieval_gateway_path(self) -> None:
         """get_semantic_retrieval uses GatewayClient as primary path."""

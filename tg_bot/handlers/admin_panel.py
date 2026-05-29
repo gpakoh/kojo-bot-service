@@ -283,7 +283,7 @@ async def panel_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Any
         user_data['last_global_menu_id'] = sent_msg.message_id
         await context.bot_data['user_service'].save_registration_message_id(user_id, sent_msg.message_id)
 
-@auth_guard()
+@auth_guard(staff_only=True)
 async def show_users_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Any:
     """Показывает меню управления пользователями со всеми счетчиками."""
     query = update.callback_query
@@ -314,7 +314,7 @@ async def show_users_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await query.edit_message_text(text, reply_markup=reply_markup)
 
 
-@auth_guard()
+@auth_guard(staff_only=True)
 async def show_user_list_by_role(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Any:
     """Показывает список пользователей по роли. Если пуст — редирект в меню."""
     query = update.callback_query
@@ -340,7 +340,7 @@ async def show_user_list_by_role(update: Update, context: ContextTypes.DEFAULT_T
     await query.edit_message_text(text, reply_markup=reply_markup)
 
 
-@auth_guard()
+@auth_guard(staff_only=True)
 async def show_user_list_by_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Any:
     """Показывает список пользователей по статусу. Если пуст — редирект в меню."""
     query = update.callback_query
@@ -366,7 +366,7 @@ async def show_user_list_by_status(update: Update, context: ContextTypes.DEFAULT
     await query.edit_message_text(text, reply_markup=reply_markup)
 
 
-@auth_guard()
+@auth_guard(staff_only=True)
 async def show_user_details(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id_override: Optional[int] = None, source_override: Optional[str] = None) -> Any:  # noqa: E501
     """Показывает детальную карточку пользователя. Поддерживает прямой вызов и вызов через callback."""
     query = update.callback_query
@@ -431,7 +431,7 @@ async def show_user_details(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     logger.debug("Admin UI: Card refreshed for %s", user_id)
 
 
-@auth_guard()
+@auth_guard(staff_only=True)
 @validate_callback
 async def handle_user_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Any:
     """
