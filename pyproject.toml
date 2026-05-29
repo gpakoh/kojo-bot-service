@@ -6,6 +6,12 @@ requires-python = ">=3.12"
 [tool.pytest.ini_options]
 pythonpath = ["."]
 addopts = "--cov=tg_bot/domain --cov=tg_bot/application --cov=tg_bot/bot_services --cov=services --cov=utils --cov-report=term-missing"
+filterwarnings = [
+    "ignore::DeprecationWarning:sqlalchemy",            # SQLAlchemy 1.4 → 2.0 transition (чужой код)
+    "ignore::pydantic.warnings.PydanticDeprecatedSince20",  # construct→model_construct migration, not our code
+    "ignore::telegram.warnings.PTBUserWarning",         # per_message recommendation; all handlers have MessageHandler in states, intentional
+    "ignore::pytest.PytestUnraisableExceptionWarning",  # unclosed event loop from aiohttp tests
+]
 
 [tool.ruff]
 line-length = 120

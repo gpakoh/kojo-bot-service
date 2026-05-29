@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from aiohttp import web
 
-from tg_bot.infrastructure.health_server import create_health_app
+from tg_bot.infrastructure.health_server import DB_POOL_KEY, REDIS_KEY, create_health_app
 
 
 @pytest.mark.asyncio
@@ -45,8 +45,8 @@ async def test_ready_returns_200_when_db_ok() -> None:
         async def close(self):
             pass
 
-    app["db_pool"] = MockPool()
-    app["redis"] = AsyncMock(ping=AsyncMock(return_value=True))
+    app[DB_POOL_KEY] = MockPool()
+    app[REDIS_KEY] = AsyncMock(ping=AsyncMock(return_value=True))
 
     runner = web.AppRunner(app)
     await runner.setup()
@@ -71,7 +71,7 @@ async def test_ready_returns_503_when_db_down() -> None:
     # Mock DB Pool That Fails
     mock_pool = MagicMock()
     mock_pool.acquire.side_effect = RuntimeError("DB connection refused")
-    app["db_pool"] = mock_pool
+    app[DB_POOL_KEY] = mock_pool
 
     runner = web.AppRunner(app)
     await runner.setup()
@@ -91,7 +91,6 @@ async def test_ready_returns_503_when_db_down() -> None:
 
 @pytest.mark.asyncio
 async def test_metrics_returns_prometheus_format() -> None:
-    from tg_bot.infrastructure.health_server import create_health_app
     app = create_health_app()
     runner = web.AppRunner(app)
     await runner.setup()
