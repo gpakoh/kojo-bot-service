@@ -163,6 +163,57 @@ curl http://localhost:8080/metrics | grep kojo_db_
 # ... через Telegram-команду
 ```
 
+## Scheduled backup script
+
+Скрипт `scripts/backup_db.sh` — автономный backup через `pg_dump` с rotation.
+
+### Использование
+
+```bash
+# с явным URL (приоритет KOJO_DATABASE_URL перед DATABASE_URL)
+KOJO_DATABASE_URL="postgresql://user:password@host:5432/db" ./scripts/backup_db.sh
+
+# с URL из окружения (если KOJO_DATABASE_URL уже экспортирован)
+export KOJO_DATABASE_URL="postgresql://user:password@host:5432/db"
+./scripts/backup_db.sh
+```
+
+### Параметры
+
+- `KOJO_DATABASE_URL` — строка подключения (приоритет выше `DATABASE_URL`)
+- `DATABASE_URL` — строка подключения (fallback, если `KOJO_DATABASE_URL` не задан)
+- `BACKUP_DIR` — директория для backup (по умолчанию `./backups`)
+- `RETENTION_DAYS` — срок хранения backup в днях (по умолчанию 14)
+
+### Формат файла
+
+`kojo_backup_YYYYmmdd_HHMMSS.dump` — custom format (pg_dump -Fc).
+
+### Проверка после backup
+
+Скрипт проверяет, что файл создан и не пустой. При ошибке завершается с exit code 1.
+
+### Cron
+
+```bash
+# ежедневно в 03:00, retention 14 дней, хранение в /var/backups/kojo
+0 3 * * * cd /path/to/kojo-bot-service && KOJO_DATABASE_URL="$KOJO_DATABASE_URL" BACKUP_DIR=/var/backups/kojo RETENTION_DAYS=14 ./scripts/backup_db.sh >> /var/log/kojo_backup.log 2>&1
+```
+
+### Что нельзя коммитить
+
+- файлы `*.dump`, `*.sql.gz`, `*.backup`
+- директорию `backups/` (уже в `.gitignore`)
+- `.env` с реальными паролями
+
+### Как проверить restore
+
+Процедура restore описана выше в разделе Restore. Команда:
+
+```bash
+pg_restore -d "$KOJO_DATABASE_URL" --clean /path/to/kojo_backup_20260529_030000.dump
+```
+
 ## Где хранить dumps
 
 | Среда | Путь | Retention |
