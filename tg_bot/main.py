@@ -88,6 +88,7 @@ from tg_bot.bot_services.settings_service import SettingsService
 from tg_bot.bot_services.user_address_service import UserAddressService
 from tg_bot.bot_services.user_service import UserService
 from tg_bot.decorators import auth_guard
+from tg_bot.infrastructure.database import DatabaseManager
 from tg_bot.handlers.admin_panel import (
     admin_courier_handler,
     admin_logo_handler,
@@ -332,7 +333,9 @@ async def post_init(app: Application) -> Any:
     )
 
     app.bot_data['settings_service'] = SettingsService(pool)
-    app.bot_data['cart_service'] = CartService(pool)
+    db_manager = DatabaseManager(pool)
+    app.bot_data['db_manager'] = db_manager
+    app.bot_data['cart_service'] = CartService(pool, db_manager=db_manager)
     app.bot_data['info_service'] = InfoService(pool)
 
     # Вставить после инициализации info_service
