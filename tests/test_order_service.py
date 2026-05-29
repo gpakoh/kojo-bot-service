@@ -1,5 +1,7 @@
 # Tests For Orderservice - Business Invariants And State Machine
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -8,6 +10,7 @@ import pytest
 from tg_bot.bot_services.order_service import OrderService
 from tg_bot.domain.order import InvalidStateTransition, Order
 from tg_bot.models import OrderStatus
+from tg_bot.tenant.config import set_current_tenant
 
 
 # Адаптер для совместимости тестов (orderstatemachine удалён при рефакторинге)
@@ -326,3 +329,90 @@ class TestOrderServiceUpdateDeliverySecurity:
         sql = update_call[0][0]
 
         assert 'payment_url = NULL' in sql
+
+
+class TestOrderServiceTenantAware:
+    @pytest.fixture
+    def mock_pool(self) -> Any:
+        pool = MagicMock()
+        conn = AsyncMock()
+        pool.acquire.return_value.__aenter__.return_value = conn
+        pool.acquire.return_value.__aexit__.return_value = AsyncMock()
+        return pool, conn
+
+    @pytest.mark.asyncio
+    async def test_uses_tenant_connection_when_tenant_is_set(self) -> Any:
+        conn = AsyncMock()
+        conn.fetchrow = AsyncMock(return_value=None)
+        conn.execute = AsyncMock(return_value="UPDATE 1")
+
+        pool = MagicMock()
+        pool.acquire = MagicMock()
+
+        class DummyDbManager:
+            def __init__(self) -> None:
+                self.called = False
+                self.seen_tenant_id = None
+
+            @asynccontextmanager
+            async def tenant_connection(self, tenant_id: str) -> Any:
+                self.called = True
+                self.seen_tenant_id = tenant_id
+                yield conn
+
+        db_manager = DummyDbManager()
+        service = OrderService(pool, db_manager=db_manager)
+
+        set_current_tenant(SimpleNamespace(bot_id="kojo-test"))
+        try:
+            await service.update_order_comment(order_id=1, comment="test")
+        finally:
+            set_current_tenant(None)
+
+        assert db_manager.called is True
+        assert db_manager.seen_tenant_id == "kojo-test"
+        pool.acquire.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_pool_when_no_tenant(self, mock_pool) -> Any:
+        pool, conn = mock_pool
+        conn.execute = AsyncMock(return_value="UPDATE 1")
+
+        class DummyDbManager:
+            @asynccontextmanager
+            async def tenant_connection(self, tenant_id: str) -> Any:
+                raise AssertionError("should not be called")
+
+        service = OrderService(pool, db_manager=DummyDbManager())
+        await service.update_order_comment(order_id=1, comment="test")
+        conn.execute.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_pool_when_no_db_manager(self, mock_pool) -> Any:
+        pool, conn = mock_pool
+        conn.execute = AsyncMock(return_value="UPDATE 1")
+
+        service = OrderService(pool)
+        await service.update_order_comment(order_id=1, comment="test")
+        conn.execute.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_does_not_fallback_when_tenant_connection_fails(self) -> Any:
+        conn = AsyncMock()
+        pool = MagicMock()
+        pool.acquire = MagicMock()
+
+        class FailingDbManager:
+            @asynccontextmanager
+            async def tenant_connection(self, tenant_id: str) -> Any:
+                raise RuntimeError("tenant db connection failed")
+                yield  # pragma: no cover
+
+        service = OrderService(pool, db_manager=FailingDbManager())
+
+        set_current_tenant(SimpleNamespace(bot_id="kojo-test"))
+        with pytest.raises(RuntimeError, match="tenant db connection failed"):
+            await service.update_order_comment(order_id=1, comment="test")
+        set_current_tenant(None)
+
+        pool.acquire.assert_not_called()
