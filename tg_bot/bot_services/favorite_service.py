@@ -1,19 +1,35 @@
 # Tg_bot/bot_services/favorite_service.py
 import logging
-from typing import Any, List, cast
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator, List, cast
 
 import asyncpg
+
+from tg_bot.tenant.config import get_current_tenant
 
 logger = logging.getLogger(__name__)
 
 class FavoriteService:
-    def __init__(self, pool: asyncpg.Pool) -> None:
+    def __init__(self, pool: asyncpg.Pool, db_manager: Any = None) -> None:
         self.pool = pool
-        logger.info("Favoriteservice инициализирован.")
+        self.db_manager = db_manager
+
+    @asynccontextmanager
+    async def _connection(self) -> AsyncIterator[Any]:
+        tenant = get_current_tenant()
+        tenant_id = getattr(tenant, "bot_id", None) if tenant else None
+
+        if self.db_manager is not None and tenant_id:
+            async with self.db_manager.tenant_connection(tenant_id) as conn:
+                yield conn
+            return
+
+        async with self.pool.acquire() as conn:
+            yield conn
 
     async def init_table(self) -> Any:
         """Создает таблицу избранного."""
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS user_favorites (
                     user_id BIGINT NOT NULL,
@@ -27,7 +43,7 @@ class FavoriteService:
 
     async def add_favorite(self, user_id: int, product_id: int) -> Any:
         """Добавляет товар в избранное."""
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             await conn.execute("""
                 INSERT INTO user_favorites (user_id, product_id)
                 VALUES ($1, $2)
@@ -36,7 +52,7 @@ class FavoriteService:
 
     async def remove_favorite(self, user_id: int, product_id: int) -> Any:
         """Удаляет товар из избранного."""
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             await conn.execute("""
                 DELETE FROM user_favorites
                 WHERE user_id = $1 AND product_id = $2
@@ -57,7 +73,7 @@ class FavoriteService:
 
     async def is_favorite(self, user_id: int, product_id: int) -> bool:
         """Проверяет, находится ли товар в избранном."""
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             res = await conn.fetchval("""
                 SELECT 1 FROM user_favorites
                 WHERE user_id = $1 AND product_id = $2
@@ -66,7 +82,7 @@ class FavoriteService:
 
     async def get_user_favorites(self, user_id: int) -> List[int]:
         """Возвращает список ID товаров в избранном."""
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             rows = await conn.fetch("""
                 SELECT product_id FROM user_favorites
                 WHERE user_id = $1
@@ -76,12 +92,12 @@ class FavoriteService:
 
     async def get_favorites_count(self, user_id: int) -> int:
         """Возвращает количество товаров в избранном."""
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             return cast(int, await conn.fetchval("SELECT COUNT(*) FROM user_favorites WHERE user_id = $1", user_id))
 
     async def set_notification(self, user_id: int, product_id: int, notify: bool) -> Any:
         """Включает/выключает уведомление о поступлении."""
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             await conn.execute("""
                 UPDATE user_favorites
                 SET notify_on_restock = $1
@@ -89,7 +105,7 @@ class FavoriteService:
             """, notify, user_id, product_id)
 
     async def get_notification_status(self, user_id: int, product_id: int) -> bool:
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             return await conn.fetchval("""
                 SELECT notify_on_restock FROM user_favorites
                 WHERE user_id = $1 AND product_id = $2
@@ -101,7 +117,7 @@ class FavoriteService:
         Выбирает только те товары, которые ЕСТЬ в наличии (p.is_available = True)
         и на которые пользователь подписан (f.notify_on_restock = True).
         """
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             # Join позволяет нам сразу проверить наличие товара в таблице products
             rows = await conn.fetch("""
                 SELECT
@@ -117,7 +133,7 @@ class FavoriteService:
 
     async def disable_notification(self, user_id: int, product_id: int) -> Any:
         """Отключает уведомление после успешной отправки."""
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             await conn.execute("""
                 UPDATE user_favorites
                 SET notify_on_restock = FALSE
@@ -127,7 +143,7 @@ class FavoriteService:
     async def save_recipe(self, user_id: int, product_id: int, text: str) -> Any:
         """Сохраняет текст рецепта для пользователя."""
         logger.info(f"Saving recipe for user {user_id}, product {product_id}")
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             await conn.execute("""
                 INSERT INTO user_favorite_recipes (user_id, product_id, recipe_text)
                 VALUES ($1, $2, $3)
@@ -136,7 +152,7 @@ class FavoriteService:
 
     async def get_saved_recipes(self, user_id: int) -> List[dict[str, Any]]:
         """Получает все сохраненные рецепты с названиями товаров."""
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             rows = await conn.fetch("""
                 SELECT r.*, p.name as product_name
                 FROM user_favorite_recipes r
@@ -148,18 +164,18 @@ class FavoriteService:
 
     async def delete_recipe(self, user_id: int, product_id: int) -> Any:
         """Удаляет рецепт."""
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             await conn.execute("DELETE FROM user_favorite_recipes WHERE user_id = $1 AND product_id = $2", user_id, product_id)
 
     async def is_recipe_saved(self, user_id: int, product_id: int) -> bool:
         """Проверяет, сохранен ли уже этот рецепт."""
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             res = await conn.fetchval("SELECT 1 FROM user_favorite_recipes WHERE user_id = $1 AND product_id = $2", user_id, product_id)
             return bool(res)
 
     async def has_any_favorites(self, user_id: int) -> bool:
         """Проверяет, есть ли у пользователя хотя бы один товар или рецепт в избранном."""
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             # Используем exists для максимальной скорости (нам не нужно считать всё)
             res = await conn.fetchval("""
                 SELECT EXISTS (
