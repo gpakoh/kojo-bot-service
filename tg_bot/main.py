@@ -312,7 +312,7 @@ async def post_init(app: Application) -> Any:
     app.bot_data['user_service'] = UserService(pool, db_manager=db_manager)
     app.bot_data['product_service'] = ProductService(pool, db_manager=db_manager)
     app.bot_data['order_service'] = OrderService(pool, idempotency_store=idempotency_store, db_manager=db_manager)
-    app.bot_data['communication_service'] = CommunicationService(pool)
+    app.bot_data['communication_service'] = CommunicationService(pool, db_manager=db_manager)
 
     address_service = UserAddressService(pool, db_manager=db_manager)
     await address_service.init_table() # Создаем таблицу, если нет
