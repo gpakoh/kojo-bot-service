@@ -319,7 +319,7 @@ async def post_init(app: Application) -> Any:
     app.bot_data['address_service'] = address_service
 
     # 1. сначала favorites
-    fav_service = FavoriteService(pool)
+    fav_service = FavoriteService(pool, db_manager=db_manager)
     await fav_service.init_table()
     app.bot_data['favorite_service'] = fav_service
 
