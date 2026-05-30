@@ -3,12 +3,20 @@ from typing import Any, Optional
 import telegram
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, Update
 from telegram.constants import ParseMode
-from telegram.ext import ContextTypes
+from telegram.ext import (
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+    ConversationHandler,
+    MessageHandler,
+    filters,
+)
 
 from tg_bot.bot_services.info_service import InfoService
 from tg_bot.keyboards import (
     CB_INFO_MENU,
     CB_PREFIX_INFO_GO,
+    CB_PREFIX_INFO_ADD,
     CB_USER_SHOW_MAIN_MENU,
     CB_CMS_MODE_TOGGLE,
     CB_CMS_ITEM_OPTS,
@@ -21,6 +29,8 @@ from tg_bot.decorators import auth_guard
 
 import logging
 logger = logging.getLogger(__name__)
+
+AWAITING_TITLE, AWAITING_RENAME, AWAITING_ORDER, AWAITING_CONTENT = range(4)
 
 
 async def _check_is_staff(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> bool:
@@ -355,3 +365,137 @@ async def move_item(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     info_service: InfoService = context.bot_data["info_service"]
     await info_service.move_page(item_id, direction)
     await show_item_options(update, context)
+
+
+@auth_guard(staff_only=True)
+async def cancel_cms(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    for key in ("cms_action", "cms_title", "cms_parent_id", "cms_page_id"):
+        context.user_data.pop(key, None)
+
+    if update.message:
+        await update.message.reply_text("Действие отменено.")
+    elif update.callback_query:
+        await update.callback_query.answer("Действие отменено", show_alert=True)
+
+    return ConversationHandler.END
+
+
+@auth_guard(staff_only=True)
+async def start_add_page(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.effective_user is None:
+        return ConversationHandler.END
+    query = update.callback_query
+    if query:
+        try:
+            await query.answer()
+        except (ValueError, KeyError, telegram.error.TelegramError):
+            pass
+
+    data = query.data.replace(CB_PREFIX_INFO_ADD, "") if query else "root"
+    parent_id = int(data) if data != "root" else None
+    context.user_data["cms_action"] = "create"
+    context.user_data["cms_parent_id"] = parent_id
+
+    if query:
+        try:
+            await query.message.reply_text(
+                "🆕 Введите название новой страницы.\n"
+                "Или /cancel, чтобы отменить.",
+            )
+        except (ValueError, KeyError, telegram.error.TelegramError):
+            pass
+
+    return AWAITING_TITLE
+
+
+@auth_guard(staff_only=True)
+async def handle_title_creation_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    text = update.message.text if update.message else ""
+    if not text:
+        await update.message.reply_text("Название не может быть пустым. Попробуйте ещё раз:")
+        return AWAITING_TITLE
+
+    if len(text) > 100:
+        await update.message.reply_text(
+            f"❌ Слишком длинное название ({len(text)} симв.). Максимум 100. Попробуйте короче:"
+        )
+        return AWAITING_TITLE
+
+    context.user_data["cms_title"] = text
+
+    await update.message.reply_text(
+        f"Название: <b>{text}</b>.\n\n"
+        "Теперь отправьте содержимое страницы.\n\n"
+        "Можно отправить:\n"
+        "• текст;\n"
+        "• фото с подписью;\n"
+        "• /skip — создать страницу без содержимого.",
+        parse_mode=ParseMode.HTML,
+    )
+
+    return AWAITING_CONTENT
+
+
+@auth_guard(staff_only=True)
+async def handle_content_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    action = context.user_data.get("cms_action")
+    if action != "create":
+        await update.message.reply_text("Сценарий редактирования пока не активен.")
+        return ConversationHandler.END
+
+    try:
+        await update.message.delete()
+    except (ValueError, KeyError, telegram.error.TelegramError):
+        pass
+
+    info_service: InfoService = context.bot_data["info_service"]
+    title = context.user_data.get("cms_title", "Без названия")
+    parent_id = context.user_data.get("cms_parent_id")
+
+    content = None
+    photo = None
+
+    if update.message.text == "/skip":
+        content = None
+        photo = None
+    elif update.message.photo:
+        photo = update.message.photo[-1].file_id
+        content = update.message.caption or ""
+    else:
+        content = update.message.text or ""
+        photo = None
+
+    await info_service.create_page(parent_id, title, content, photo)
+
+    for key in ("cms_action", "cms_title", "cms_parent_id"):
+        context.user_data.pop(key, None)
+
+    await update.message.reply_text(
+        "✅ Страница создана!",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ Вернуться к списку", callback_data=CB_INFO_MENU)]
+        ]),
+    )
+
+    return ConversationHandler.END
+
+
+info_cms_conversation = ConversationHandler(
+    entry_points=[
+        CallbackQueryHandler(start_add_page, pattern=f"^{CB_PREFIX_INFO_ADD}"),
+    ],
+    states={
+        AWAITING_TITLE: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_title_creation_input),
+        ],
+        AWAITING_CONTENT: [
+            MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, handle_content_input),
+            CommandHandler("skip", handle_content_input),
+        ],
+    },
+    fallbacks=[
+        CommandHandler("cancel", cancel_cms),
+    ],
+    name="info_cms_conversation",
+    persistent=False,
+)

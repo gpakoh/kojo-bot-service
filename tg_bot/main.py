@@ -21,6 +21,7 @@ from telegram.ext import (
     CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
+    ConversationHandler,
     InlineQueryHandler,
     MessageHandler,
     PersistenceInput,
@@ -112,7 +113,7 @@ from tg_bot.handlers.ai_chat import (
     start_ai_chat,
 )
 from tg_bot.handlers.common import cleanup_previous_menu, handle_stale_callback
-from tg_bot.handlers.info import show_info_menu, toggle_edit_mode, show_item_options, move_item
+from tg_bot.handlers.info import show_info_menu, toggle_edit_mode, show_item_options, move_item, info_cms_conversation
 from tg_bot.keyboards import CB_INFO_MENU, CB_PREFIX_INFO_GO
 from tg_bot.handlers.order import order_handler
 from tg_bot.handlers.registration import (
@@ -834,6 +835,7 @@ async def main() -> None:
     application.add_handler(CallbackQueryHandler(toggle_edit_mode, pattern=f"^{CB_CMS_MODE_TOGGLE}$"))
     application.add_handler(CallbackQueryHandler(show_item_options, pattern=f"^{CB_CMS_ITEM_OPTS}"))
     application.add_handler(CallbackQueryHandler(move_item, pattern=f"^{CB_CMS_MOVE_UP}|^{CB_CMS_MOVE_DOWN}"))
+    application.add_handler(info_cms_conversation)
     application.add_handler(user_support_handler)
     application.add_handler(cancellation_handler)
     application.add_handler(order_comment_handler)
