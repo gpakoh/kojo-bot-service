@@ -10,6 +10,7 @@ from typing import Any, List
 import asyncpg
 import httpx
 
+from tg_bot.infrastructure.database import DatabaseManager
 from utils.logging_setup import logger
 
 # Файл находится в /app/tg_bot/bot_services/product_sync_service.py
@@ -65,7 +66,7 @@ def parse_product_file(file_path: Path) -> dict[str, Any]:
     return data
 
 
-async def _handle_force_recache(pool: asyncpg.Pool) -> tuple[bool, bool]:
+async def _handle_force_recache(conn, tenant_id: str) -> tuple[bool, bool]:
     """
     Железобетонный механизм проверки флагов через очередь (Lock).
     Ни одна функция не войдет, пока предыдущая не отпустит замок.
@@ -92,8 +93,7 @@ async def _handle_force_recache(pool: asyncpg.Pool) -> tuple[bool, bool]:
                 # Выполняем действия, только если флаги true
                 if force_db is True:
                     logger.warning("🚀 [action] выполняем очистку бд...")
-                    async with pool.acquire() as conn:
-                        await conn.execute("TRUNCATE TABLE products, product_variants, sync_metadata RESTART IDENTITY CASCADE;")
+                    await conn.execute("TRUNCATE TABLE products, product_variants, sync_metadata RESTART IDENTITY CASCADE;")
                     db_recache = True
                     config_data["force_recache_product"] = False
 
@@ -249,7 +249,7 @@ async def _get_variant_from_llm(name: str, task_type: str) -> str:
 
     return ""
 
-async def _process_single_product_directory(conn: asyncpg.Connection, product_dir: Path, search_recache: bool = False) -> str:
+async def _process_single_product_directory(conn: asyncpg.Connection, product_dir: Path, search_recache: bool = False, tenant_id: str = "") -> str:
     """Обрабатывает папку товара: парсит, обогащает поиск, пишет в БД."""
     file_path = product_dir / "product.txt"
     parsed_data = parse_product_file(file_path)
@@ -330,13 +330,13 @@ async def _process_single_product_directory(conn: asyncpg.Connection, product_di
     # Используем search_variants колонку (нужно добавить в бд: alter table products add column search_variants text)
     product_id = await conn.fetchval(
         """
-        INSERT INTO products (name, short_description, full_description, chapters, images, is_available, search_variants)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        ON CONFLICT (name) DO UPDATE SET
-        short_description = $2, full_description = $3, chapters = $4, images = $5, is_available = $6, search_variants = $7
+        INSERT INTO products (tenant_id, name, short_description, full_description, chapters, images, is_available, search_variants)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (tenant_id, name) DO UPDATE SET
+        name = $2, short_description = $3, full_description = $4, chapters = $5, images = $6, is_available = $7, search_variants = $8
         RETURNING id;
         """,
-        product_name, parsed_data.get('short_description', ''), parsed_data.get('full_description', ''),
+        tenant_id, product_name, parsed_data.get('short_description', ''), parsed_data.get('full_description', ''),
         [c.strip() for c in parsed_data.get('chapters', '').split(',')] if parsed_data.get('chapters') else [],
         images, parsed_data.get('sale', 'False').lower() == 'true',
         search_line
@@ -366,58 +366,63 @@ def _write_rag_file(rag_content_parts: List[str]) -> Any:
         logger.error(f"❌ Не удалось записать файл для RAG: {e}")
 
 
-async def sync_products(pool: asyncpg.Pool) -> Any:
+async def sync_products(pool: asyncpg.Pool, tenant_id: str) -> Any:
     """Главная функция-оркестратор синхронизации."""
-    logger.info("--- запуск синхронизации каталога продуктов ---")
+    if not tenant_id:
+        raise RuntimeError("sync_products requires explicit tenant_id under RLS")
 
-    # Флаги сбрасываются прямо внутри этой функции
-    db_recache, search_recache = await _handle_force_recache(pool)
+    logger.info(f"--- запуск синхронизации каталога продуктов (tenant={tenant_id}) ---")
 
-    if not PRODUCTS_DIR.is_dir():
-        logger.warning(f"Директория продуктов '{PRODUCTS_DIR}' не найдена.")
-        return
+    db_manager = DatabaseManager(pool)
 
-    # Загружаем хеши (если бд не чистилась)
-    sync_hashes = {}
-    if not db_recache:
-        try:
-            rows = await pool.fetch("SELECT product_folder, file_hash FROM sync_metadata")
-            sync_hashes = {row['product_folder']: row['file_hash'] for row in rows}
-        except (RuntimeError, ConnectionError, TimeoutError, OSError):
-            logger.error("Не удалось загрузить метаданные синхронизации.")
+    async with db_manager.tenant_connection(tenant_id) as conn:
+        # Флаги сбрасываются прямо внутри этой функции
+        db_recache, search_recache = await _handle_force_recache(conn, tenant_id)
 
-    rag_content_parts: List[str] = []
+        if not PRODUCTS_DIR.is_dir():
+            logger.warning(f"Директория продуктов '{PRODUCTS_DIR}' не найдена.")
+            return
 
-    for product_dir in PRODUCTS_DIR.iterdir():
-        if not product_dir.is_dir():
-            continue
-        product_file = product_dir / "product.txt"
-        if not product_file.exists():
-            continue
+        # Загружаем хеши (если бд не чистилась)
+        sync_hashes = {}
+        if not db_recache:
+            try:
+                rows = await conn.fetch("SELECT product_folder, file_hash FROM sync_metadata")
+                sync_hashes = {row['product_folder']: row['file_hash'] for row in rows}
+            except (RuntimeError, ConnectionError, TimeoutError, OSError):
+                logger.error("Не удалось загрузить метаданные синхронизации.")
 
-        current_hash = get_file_hash(product_file)
+        rag_content_parts: List[str] = []
 
-        # Условие пропуска: не форс-поиск и хеш совпал
-        if not search_recache and sync_hashes.get(product_dir.name) == current_hash:
-            continue
+        for product_dir in PRODUCTS_DIR.iterdir():
+            if not product_dir.is_dir():
+                continue
+            product_file = product_dir / "product.txt"
+            if not product_file.exists():
+                continue
 
-        logger.info(f"🔄 '{product_dir.name}': начало обработки (ForceSearch={search_recache})")
-        try:
-            async with pool.acquire() as conn:
-                rag_part = await _process_single_product_directory(conn, product_dir, search_recache)
+            current_hash = get_file_hash(product_file)
+
+            # Условие пропуска: не форс-поиск и хеш совпал
+            if not search_recache and sync_hashes.get(product_dir.name) == current_hash:
+                continue
+
+            logger.info(f"🔄 '{product_dir.name}': начало обработки (ForceSearch={search_recache})")
+            try:
+                rag_part = await _process_single_product_directory(conn, product_dir, search_recache, tenant_id)
                 rag_content_parts.append(rag_part)
 
                 await conn.execute(
                     """
-                    INSERT INTO sync_metadata (product_folder, file_hash) VALUES ($1, $2)
-                    ON CONFLICT (product_folder) DO UPDATE SET file_hash = $2, last_synced_at = NOW();
+                    INSERT INTO sync_metadata (tenant_id, product_folder, file_hash) VALUES ($1, $2, $3)
+                    ON CONFLICT (tenant_id, product_folder) DO UPDATE SET file_hash = $3, last_synced_at = NOW();
                     """,
-                    product_dir.name, current_hash
+                    tenant_id, product_dir.name, current_hash
                 )
-        except (RuntimeError, ConnectionError, TimeoutError, OSError) as e:
-            logger.error(f"❌ ОШИБКА при обработке '{product_dir.name}': {e}")
+            except (RuntimeError, ConnectionError, TimeoutError, OSError) as e:
+                logger.error(f"❌ ОШИБКА при обработке '{product_dir.name}': {e}")
 
-    if rag_content_parts:
-        _write_rag_file(rag_content_parts)
+        if rag_content_parts:
+            _write_rag_file(rag_content_parts)
 
     logger.info("--- синхронизация каталога продуктов завершена ---")

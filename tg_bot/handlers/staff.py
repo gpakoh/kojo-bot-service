@@ -185,7 +185,10 @@ async def trigger_manual_sync(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         # 1. синхронизация файлов и бд
         # Этот процесс читает product.txt и обновляет таблицу products
-        await sync_service.sync_products(pool)
+        tenant_id = context.bot_data.get("bot_id_for_quart")
+        if not tenant_id:
+            raise RuntimeError("bot_id_for_quart is required for product sync")
+        await sync_service.sync_products(pool, tenant_id=tenant_id)
 
         await status_msg.edit_text("🔄 Каталог обновлен. Проверяю листы ожидания...")
 
