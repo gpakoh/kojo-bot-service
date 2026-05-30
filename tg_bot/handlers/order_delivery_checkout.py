@@ -17,6 +17,7 @@ from tg_bot.bot_services.settings_service import SettingsService
 from tg_bot.bot_services.user_address_service import UserAddressService
 from tg_bot.bot_services.user_service import UserService
 from tg_bot.handlers.common import cleanup_previous_menu
+from tg_bot.handlers.order_admin_notifications import notify_admins_about_cancelled_order
 from tg_bot.keyboards import (
     CB_PREFIX_ORDER_DETAILS,
     get_delivery_method_keyboard,
@@ -395,6 +396,12 @@ async def handle_order_created_actions(
 
     if query.data == order_action_cancel_callback:
         await order_service.cancel_order_with_reason(order_id, "Отменен пользователем")
+        await notify_admins_about_cancelled_order(
+            context=context,
+            order_id=order_id,
+            user_id=user_id,
+            reason="Отменен пользователем",
+        )
         logger.info(f"[ORDER] Order #{order_id} cancelled by user.")
 
         keyboard = [
