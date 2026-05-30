@@ -1,6 +1,7 @@
 # Tg_bot/bot_services/order_service.py
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 
 import asyncpg
 
@@ -12,9 +13,28 @@ logger = logging.getLogger(__name__)
 
 
 class OrderService:
-    def __init__(self, pool: asyncpg.Pool, idempotency_store: Optional[Any] = None) -> None:
+    def __init__(
+        self,
+        pool: asyncpg.Pool,
+        idempotency_store: Optional[Any] = None,
+        db_manager: Any = None,
+    ) -> None:
         self.pool = pool
         self._idempotency = idempotency_store
+        self.db_manager = db_manager
+
+    @asynccontextmanager
+    async def _connection(self) -> AsyncIterator[Any]:
+        tenant = get_current_tenant()
+        tenant_id = getattr(tenant, "bot_id", None) if tenant else None
+
+        if self.db_manager is not None and tenant_id:
+            async with self.db_manager.tenant_connection(tenant_id) as conn:
+                yield conn
+            return
+
+        async with self.pool.acquire() as conn:
+            yield conn
         logger.info("OrderService инициализирован.")
 
     def calculate_total_amount(self, cart: dict[str, dict[str, Any]], delivery_price: float = 0.0) -> float:
@@ -49,7 +69,7 @@ class OrderService:
                 return None  # Already processed this exact status update
             await self._idempotency.start("order:status", idempotency_key)
 
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             # First, Get Current Order To Check State Transition Validity
             current_row = await conn.fetchrow(
                 "SELECT * FROM orders WHERE id = $1",
@@ -89,7 +109,7 @@ class OrderService:
         Отменяет заказ и записывает причину отмены.
         """
         logger.info(f"Отмена заказа #{order_id}. Причина: {reason}")
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             row = await conn.fetchrow(
                 """
                 UPDATE orders
@@ -108,7 +128,7 @@ class OrderService:
         Сохраняет URL для оплаты и переводит заказ в статус 'Ожидает оплаты'.
         """
         logger.info(f"Сохранение URL оплаты для заказа #{order_id} -> AWAITING_PAYMENT.")
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             await conn.execute(
                 """
                 UPDATE orders
@@ -123,7 +143,7 @@ class OrderService:
 
     async def get_orders_by_user_id(self, user_id: int) -> List[Order]:
         """Возвращает заказы, скрывая те, что были созданы до последней очистки данных."""
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             # Получаем дату очистки (если была)
             cleared_at = await conn.fetchval("SELECT data_cleared_at FROM users WHERE telegram_id = $1", user_id)
 
@@ -143,7 +163,7 @@ class OrderService:
 
     async def get_full_order_details(self, order_id: int) -> Optional[Tuple[Order, List[OrderItem]]]:
         """Возвращает заказ и список товаров."""
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             order_row = await conn.fetchrow("SELECT * FROM orders WHERE id = $1", order_id)
             if not order_row:
                 return None
@@ -163,7 +183,7 @@ class OrderService:
             OrderStatus.READY_FOR_PICKUP.value, OrderStatus.SHIPPED.value,
         ]
         query = "SELECT * FROM orders WHERE user_id = $1 AND status = ANY($2) ORDER BY created_at DESC LIMIT 1"
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             row = await conn.fetchrow(query, user_id, active_statuses)
             return Order.from_db_row(row) if row else None
 
@@ -183,13 +203,13 @@ class OrderService:
             GROUP BY o.id, u.fio
             ORDER BY o.created_at ASC;
         """
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             rows = await conn.fetch(query, status_values)
             return [dict[str, Any](row) for row in rows]
 
     async def get_order_counts_by_status(self) -> Dict[OrderStatus, int]:
         """Статистика по статусам."""
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             rows = await conn.fetch("SELECT status, COUNT(*) as count FROM orders GROUP BY status")
             # Преобразуем строковые статусы из бд в enum ключи
             # Будь внимателен: если в бд есть статусы, которых нет в enum, будет ошибка.
@@ -205,7 +225,7 @@ class OrderService:
     async def get_orders_by_statuses(self, statuses: List[OrderStatus]) -> List[Order]:
         """Список заказов по конкретным статусам."""
         status_values = [s.value for s in statuses]
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             rows = await conn.fetch(
                 "SELECT * FROM orders WHERE status = ANY($1) ORDER BY created_at DESC",
                 status_values
@@ -231,14 +251,14 @@ class OrderService:
             total_amount = self.calculate_total_amount(cart, delivery_price)
         elif total_amount is None:
             # If Neither Cart Nor Total_amount Provided, Fetch From DB
-            async with self.pool.acquire() as conn:
+            async with self._connection() as conn:
                 row = await conn.fetchrow("SELECT total_amount FROM orders WHERE id = $1", order_id)
                 total_amount = float(row['total_amount']) if row else 0.0
 
         logger.debug("update_order_delivery: order_id=%d, is_gift=%s", order_id, is_gift)
         logger.info(f"Обновление доставки для заказа #{order_id}. Новая сумма: {total_amount}")
 
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             # First Check If Order Is Already Paid (to Preserve Payment_url)
             order_status_row = await conn.fetchrow(
                 "SELECT status FROM orders WHERE id = $1",
@@ -312,7 +332,7 @@ class OrderService:
         """
         logger.info(f"Обновление комментария к заказу #{order_id}")
 
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             await conn.execute(
                 """
                 UPDATE orders
@@ -323,7 +343,7 @@ class OrderService:
             )
     async def _get_order_by_id(self, order_id: int) -> Optional[Order]:
         """Fetch a single order by ID from the database."""
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             row = await conn.fetchrow("SELECT * FROM orders WHERE id = $1", order_id)
             if row:
                 return Order.from_db_row(row)
@@ -367,7 +387,7 @@ class OrderService:
         logger.debug("create_order: is_gift=%s, comment_len=%d", is_gift, len(gift_comment) if gift_comment else 0)
         logger.info(f"Creating order for {user_id}. Gift: {is_gift}")
 
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             async with conn.transaction():
                 order_row = await conn.fetchrow(
                     """

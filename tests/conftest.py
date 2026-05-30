@@ -34,6 +34,7 @@ def mock_context():
     context.bot.edit_message_text = AsyncMock()
     context.bot.answer_callback_query = AsyncMock()
     context.bot.delete_message = AsyncMock()
+    context.di = None  # явно сбрасываем, чтобы между тестами не переиспользовался
     return context
 
 

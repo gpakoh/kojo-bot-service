@@ -3,15 +3,17 @@
 
 
 class TestInfoHandler:
-    def test_info_conversation_exists(self) -> None:
-        from tg_bot.handlers.info import info_conversation
-        assert info_conversation is not None
+    def test_show_info_menu_exists(self) -> None:
+        from tg_bot.handlers.info import show_info_menu
+        assert callable(show_info_menu)
 
-    def test_info_conversation_type(self) -> None:
-        from telegram.ext import ConversationHandler
-
-        from tg_bot.handlers.info import info_conversation
-        assert isinstance(info_conversation, ConversationHandler)
+    def test_info_handler_in_main_registered(self) -> None:
+        from tg_bot.keyboards import CB_INFO_MENU, CB_PREFIX_INFO_GO
+        from tg_bot.handlers.info import show_info_menu
+        from telegram.ext import CallbackQueryHandler
+        handler = CallbackQueryHandler(show_info_menu, pattern=f"^{CB_INFO_MENU}$|^{CB_PREFIX_INFO_GO}")
+        assert isinstance(handler, CallbackQueryHandler)
+        assert callable(handler.callback)
 
 
 class TestCommonHandler:

@@ -366,6 +366,12 @@ def _write_rag_file(rag_content_parts: List[str]) -> Any:
         logger.error(f"❌ Не удалось записать файл для RAG: {e}")
 
 
+# NOTE:
+# Product sync is a system-level catalog operation.
+# It intentionally uses the raw pool instead of tenant-scoped connections because
+# it refreshes global product tables during startup/admin sync and may run outside
+# Telegram tenant middleware. Do not wrap this path in tenant_connection() unless
+# product sync is redesigned to be tenant-explicit.
 async def sync_products(pool: asyncpg.Pool) -> Any:
     """Главная функция-оркестратор синхронизации."""
     logger.info("--- запуск синхронизации каталога продуктов ---")

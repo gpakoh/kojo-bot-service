@@ -1,12 +1,15 @@
 # Tests/test_cart_service.py
 import asyncio
 import datetime
+from contextlib import asynccontextmanager
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from tg_bot.bot_services.cart_service import CartService, CartValidationResult
+from tg_bot.tenant.config import set_current_tenant
 
 
 class TestCartService:
@@ -235,3 +238,90 @@ class TestCartConcurrent:
         await asyncio.gather(*tasks)
 
         assert conn.execute.call_count == 3
+
+
+class TestCartTenantAware:
+    @pytest.fixture
+    def mock_pool(self) -> Any:
+        pool = MagicMock()
+        conn = AsyncMock()
+        pool.acquire.return_value.__aenter__.return_value = conn
+        pool.acquire.return_value.__aexit__.return_value = AsyncMock()
+        return pool, conn
+
+    @pytest.mark.asyncio
+    async def test_uses_tenant_connection_when_tenant_is_set(self) -> Any:
+        conn = AsyncMock()
+        conn.fetchrow = AsyncMock(return_value=None)
+        conn.execute = AsyncMock(return_value="INSERT 0 1")
+
+        pool = MagicMock()
+        pool.acquire = MagicMock()
+
+        class DummyDbManager:
+            def __init__(self) -> None:
+                self.called = False
+                self.seen_tenant_id = None
+
+            @asynccontextmanager
+            async def tenant_connection(self, tenant_id: str) -> Any:
+                self.called = True
+                self.seen_tenant_id = tenant_id
+                yield conn
+
+        db_manager = DummyDbManager()
+        service = CartService(pool, db_manager=db_manager)
+
+        set_current_tenant(SimpleNamespace(bot_id="kojo-test"))
+        try:
+            await service.update_item(user_id=1, product_id=2, quantity=1)
+        finally:
+            set_current_tenant(None)
+
+        assert db_manager.called is True
+        assert db_manager.seen_tenant_id == "kojo-test"
+        pool.acquire.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_pool_when_no_tenant(self, mock_pool) -> Any:
+        pool, conn = mock_pool
+        conn.execute = AsyncMock(return_value="INSERT 0 1")
+
+        class DummyDbManager:
+            @asynccontextmanager
+            async def tenant_connection(self, tenant_id: str) -> Any:
+                raise AssertionError("should not be called")
+
+        service = CartService(pool, db_manager=DummyDbManager())
+        await service.update_item(user_id=1, product_id=2, quantity=1)
+        conn.execute.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_pool_when_no_db_manager(self, mock_pool) -> Any:
+        pool, conn = mock_pool
+        conn.execute = AsyncMock(return_value="INSERT 0 1")
+
+        service = CartService(pool)
+        await service.update_item(user_id=1, product_id=2, quantity=1)
+        conn.execute.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_does_not_fallback_when_tenant_connection_fails(self) -> Any:
+        conn = AsyncMock()
+        pool = MagicMock()
+        pool.acquire = MagicMock()
+
+        class FailingDbManager:
+            @asynccontextmanager
+            async def tenant_connection(self, tenant_id: str) -> Any:
+                raise RuntimeError("tenant db connection failed")
+                yield  # pragma: no cover
+
+        service = CartService(pool, db_manager=FailingDbManager())
+
+        set_current_tenant(SimpleNamespace(bot_id="kojo-test"))
+        with pytest.raises(RuntimeError, match="tenant db connection failed"):
+            await service.update_item(user_id=1, product_id=2, quantity=1)
+        set_current_tenant(None)
+
+        pool.acquire.assert_not_called()

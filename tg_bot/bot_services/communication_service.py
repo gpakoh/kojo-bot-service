@@ -1,23 +1,39 @@
 # Tg_bot/services/communication_service.py
 import logging
-from typing import Any, List, Optional, cast
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator, List, Optional, cast
 
 import asyncpg
 
+from tg_bot.tenant.config import get_current_tenant
 from tg_bot.models import CommunicationThread, SenderRole, ThreadMessage
 
 logger = logging.getLogger(__name__)
 
 class CommunicationService:
-    def __init__(self, pool: asyncpg.Pool) -> None:
+    def __init__(self, pool: asyncpg.Pool, db_manager: Any = None) -> None:
         self.pool = pool
+        self.db_manager = db_manager
         logger.info("Communicationservice инициализирован.")
+
+    @asynccontextmanager
+    async def _connection(self) -> AsyncIterator[Any]:
+        tenant = get_current_tenant()
+        tenant_id = getattr(tenant, "bot_id", tenant)
+
+        if tenant_id and self.db_manager is not None:
+            async with self.db_manager.tenant_connection(tenant_id) as conn:
+                yield conn
+            return
+
+        async with self.pool.acquire() as conn:
+            yield conn
 
     async def get_or_create_thread(self, order_id: int) -> CommunicationThread:
         """
         Находит чат по ID заказа. Если чата нет, создает новый.
         """
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             thread_row = await conn.fetchrow(
                 "SELECT * FROM communication_threads WHERE order_id = $1", order_id
             )
@@ -43,7 +59,7 @@ class CommunicationService:
         """
         Добавляет сообщение в чат, зная ID треда.
         """
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             async with conn.transaction():
                 # Добавляем сообщение
                 message_row = await conn.fetchrow(
@@ -97,7 +113,7 @@ class CommunicationService:
             JOIN orders o ON ct.order_id = o.id
             WHERE ct.id = $1
         """
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             user_id = await conn.fetchval(query, thread_id)
             if user_id:
                 logger.info(f"Для треда #{thread_id} найден клиент {user_id}.")
@@ -115,7 +131,7 @@ class CommunicationService:
         3. Важные, но прочитанные
         4. Просто прочитанные
         """
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             rows = await conn.fetch(
                 """
                 SELECT * FROM communication_threads
@@ -127,7 +143,7 @@ class CommunicationService:
     async def get_messages_for_thread(self, thread_id: int) -> List[ThreadMessage]:
         """Возвращает сообщения чата, скрывая те, что были до очистки (для юзера)."""
         # Примечание: для админки мы можем использовать другой метод или флаг ignore_clear
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             # Находим владельца заказа через тред
             user_data = await conn.fetchrow(
                 "SELECT u.data_cleared_at FROM communication_threads ct "
@@ -169,20 +185,20 @@ class CommunicationService:
         params.append(thread_id)
         query = f"UPDATE communication_threads SET {', '.join(updates)} WHERE id = ${len(params)}"
 
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             await conn.execute(query, *params)
         logger.info(f"Статус чата #{thread_id} обновлен.")
 
     async def get_or_create_thread_by_id(self, thread_id: int) -> Optional[CommunicationThread]:
         """Находит чат по его собственному ID."""
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             row = await conn.fetchrow("SELECT * FROM communication_threads WHERE id = $1", thread_id)
             return CommunicationThread(**dict(row)) if row else None
 
     async def get_thread_by_order_id(self, order_id: int) -> Any:
         """Получает тред по номеру заказа."""
         query = "SELECT * FROM communication_threads WHERE order_id = $1"
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             row = await conn.fetchrow(query, order_id)
             if row:
                 from tg_bot.models import CommunicationThread  # Локальный импорт
@@ -202,12 +218,12 @@ class CommunicationService:
                 WHERE ct.order_id = $1
             )
         """
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             return cast(bool, await conn.fetchval(query, order_id))
 
     async def get_or_create_consultation_thread(self, user_id: int) -> CommunicationThread:
         """Находит или создает общую ветку консультации для пользователя."""
-        async with self.pool.acquire() as conn:
+        async with self._connection() as conn:
             # Ищем тред, где order_id is null (это и есть консультация)
             # Нам нужно найти тред именно этого пользователя, поэтому джойним заказы или
             # (что проще) ориентируемся на сообщения.

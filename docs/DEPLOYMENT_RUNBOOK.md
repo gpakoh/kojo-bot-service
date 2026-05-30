@@ -161,6 +161,7 @@ Redis-backup не требуется — данные Redis восстанавл
 - **DATABASE_URL недоступен** — бот падает при старте с `connection refused`. Решение: проверить, что PostgreSQL запущен и доступен по указанному адресу/порту.
 - **Redis недоступен** — бот стартует, но с warning `Redis unavailable, using in-memory fallback`. Решение: проверить `redis-cli ping`, запустить контейнер Redis.
 - **alembic migration failed** — ошибка применения миграций. Решение: проверить последовательность версий, выполнить `alembic downgrade -1`, исправить, повторить.
+- **RLS migration safety** — `KOJO_ENABLE_FORCE_RLS` отключён по умолчанию. Не включать `KOJO_ENABLE_FORCE_RLS=true`, пока production DB access paths не устанавливают `app.current_tenant` для каждого соединения. Если RLS включить до полной проводки tenant context, запросы к tenant-таблицам могут не возвращать строк или падать.
 - **docker network conflict** — `network already exists` или `overlay network not found`. Решение: `docker network prune` или `docker compose down && docker compose up`.
 - **GitHub mirror не синхронизирован** — зеркало отстаёт от Gitea. Решение: выполнить explicit SHA push: `git push github $(git rev-parse HEAD):main`.
 - **CI не прошёл** — мерж заблокирован branch protection. Решение: исправить ошибки в новой ветке, дождаться зелёного CI, обновить PR.
@@ -190,3 +191,4 @@ Redis-backup не требуется — данные Redis восстанавл
 - [docs/RELEASES.md](RELEASES.md) — история релизов
 - [deploy/CHECKLIST.md](../deploy/CHECKLIST.md) — pre/post-deploy проверки
 - [deploy/RUNBOOKS.md](../deploy/RUNBOOKS.md) — операционные runbook'и
+- [docs/GATEWAY_HMAC_CONTRACT.md](GATEWAY_HMAC_CONTRACT.md) — HMAC-контракт gateway и требования к проверке на принимающей стороне

@@ -1,5 +1,8 @@
 """Tests for tenant migration management."""
+import importlib.util
 import subprocess
+from contextlib import ExitStack
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -310,3 +313,91 @@ class TestGetMigrationManager:
     def test_returns_tenant_migration_manager_instance(self) -> None:
         mgr = get_migration_manager()
         assert isinstance(mgr, TenantMigrationManager)
+
+
+class TestTenantRlsMigration005:
+    """Tests for 005_tenant_rls.py env-guarded RLS enforcement."""
+
+    _TABLES = [
+        'users', 'orders', 'order_items', 'products', 'product_variants',
+        'cart_items', 'user_favorites', 'user_favorite_recipes',
+        'info_pages', 'user_saved_addresses', 'settings', 'bot_settings',
+        'communication_threads', 'thread_messages', 'sync_metadata', 'event_store',
+    ]
+
+    def _load_migration(self) -> Any:
+        spec = importlib.util.spec_from_file_location(
+            '_005_tenant_rls',
+            'alembic/versions/005_tenant_rls.py',
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_env_not_set_disables_force_rls(self) -> None:
+        with patch.dict('os.environ', {}, clear=True):
+            migration = self._load_migration()
+
+        assert hasattr(migration, 'upgrade')
+
+    def test_env_false_disables_force_rls(self) -> None:
+        with patch.dict('os.environ', {"KOJO_ENABLE_FORCE_RLS": "false"}, clear=True):
+            migration = self._load_migration()
+
+        assert hasattr(migration, 'upgrade')
+
+    def test_env_true_enables_force_rls(self) -> None:
+        with patch.dict('os.environ', {"KOJO_ENABLE_FORCE_RLS": "true"}, clear=True):
+            migration = self._load_migration()
+
+        assert hasattr(migration, 'upgrade')
+
+    def test_default_emits_disable_no_force(self) -> None:
+        with patch.dict('os.environ', {}, clear=True):
+            migration = self._load_migration()
+            with ExitStack() as stack:
+                stack.enter_context(patch.object(migration.op, 'add_column'))
+                stack.enter_context(patch.object(migration.op, 'create_index'))
+                stack.enter_context(patch.object(migration.op, 'drop_constraint'))
+                stack.enter_context(patch.object(migration.op, 'create_unique_constraint'))
+                mock_execute = stack.enter_context(patch.object(migration.op, 'execute'))
+                migration.upgrade()
+
+        force_calls = [
+            c for c in mock_execute.call_args_list
+            if 'ALTER TABLE' in c[0][0]
+            and 'FORCE ROW LEVEL SECURITY' in c[0][0]
+            and 'NO FORCE' not in c[0][0]
+        ]
+        no_force_calls = [
+            c for c in mock_execute.call_args_list
+            if 'ALTER TABLE' in c[0][0] and 'NO FORCE ROW LEVEL SECURITY' in c[0][0]
+        ]
+        disable_calls = [
+            c for c in mock_execute.call_args_list
+            if 'ALTER TABLE' in c[0][0] and 'DISABLE ROW LEVEL SECURITY' in c[0][0]
+        ]
+
+        assert len(force_calls) == 0
+        assert len(no_force_calls) == len(self._TABLES)
+        assert len(disable_calls) == len(self._TABLES)
+
+    def test_env_true_emits_force_rls(self) -> None:
+        with patch.dict('os.environ', {"KOJO_ENABLE_FORCE_RLS": "true"}, clear=True):
+            migration = self._load_migration()
+            with ExitStack() as stack:
+                stack.enter_context(patch.object(migration.op, 'add_column'))
+                stack.enter_context(patch.object(migration.op, 'create_index'))
+                stack.enter_context(patch.object(migration.op, 'drop_constraint'))
+                stack.enter_context(patch.object(migration.op, 'create_unique_constraint'))
+                mock_execute = stack.enter_context(patch.object(migration.op, 'execute'))
+                migration.upgrade()
+
+        force_calls = [
+            c for c in mock_execute.call_args_list
+            if 'ALTER TABLE' in c[0][0]
+            and 'FORCE ROW LEVEL SECURITY' in c[0][0]
+            and 'NO FORCE' not in c[0][0]
+        ]
+
+        assert len(force_calls) == len(self._TABLES)
