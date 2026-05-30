@@ -48,6 +48,7 @@ class TestChooseDeliveryMethod:
             delivery_type_self_callback="self",
             delivery_type_pickup_callback="pickup",
             delivery_type_yandex_callback="yandex",
+            delivery_type_courier_callback="courier",
             delivery_method_state=DELIVERY_METHOD_STATE,
         )
         assert result == ConversationHandler.END
@@ -68,6 +69,7 @@ class TestChooseDeliveryMethod:
             delivery_type_self_callback="self",
             delivery_type_pickup_callback="pickup",
             delivery_type_yandex_callback="yandex",
+            delivery_type_courier_callback="courier",
             delivery_method_state=DELIVERY_METHOD_STATE,
         )
         assert result == ConversationHandler.END
@@ -88,6 +90,7 @@ class TestChooseDeliveryMethod:
             delivery_type_self_callback="self",
             delivery_type_pickup_callback="pickup",
             delivery_type_yandex_callback="yandex",
+            delivery_type_courier_callback="courier",
             delivery_method_state=DELIVERY_METHOD_STATE,
         )
         assert result == 42
@@ -109,6 +112,7 @@ class TestChooseDeliveryMethod:
             delivery_type_self_callback="pickup_self",
             delivery_type_pickup_callback="pickup",
             delivery_type_yandex_callback="yandex",
+            delivery_type_courier_callback="courier",
             delivery_method_state=DELIVERY_METHOD_STATE,
         )
         assert result == 7
@@ -130,6 +134,7 @@ class TestChooseDeliveryMethod:
             delivery_type_self_callback="self",
             delivery_type_pickup_callback="cdek_sel",
             delivery_type_yandex_callback="yandex",
+            delivery_type_courier_callback="courier",
             delivery_method_state=DELIVERY_METHOD_STATE,
         )
         assert result == 5
@@ -151,10 +156,38 @@ class TestChooseDeliveryMethod:
             delivery_type_self_callback="self",
             delivery_type_pickup_callback="pickup",
             delivery_type_yandex_callback="yandex_sel",
+            delivery_type_courier_callback="courier",
             delivery_method_state=DELIVERY_METHOD_STATE,
         )
         assert result == 6
         handle_yandex_selection_fn.assert_awaited_once_with(mock_update, mock_context)
+
+
+    @pytest.mark.asyncio
+    async def test_courier_callback_routes_to_handle_courier_selection(self, mock_update, mock_context):
+        cq = _make_cq(data="delivery_courier")
+        mock_update.callback_query = cq
+        mock_update.effective_chat = MagicMock()
+        with patch(
+            "tg_bot.handlers.order_delivery_checkout.handle_courier_selection",
+            new_callable=AsyncMock,
+            return_value=9,
+        ) as mock_courier:
+            result = await choose_delivery_method(
+                mock_update, mock_context,
+                show_cart_fn=MagicMock(),
+                handle_self_pickup_fn=MagicMock(),
+                handle_cdek_selection_fn=MagicMock(),
+                handle_yandex_selection_fn=MagicMock(),
+                delivery_back_callback="back",
+                delivery_type_self_callback="self",
+                delivery_type_pickup_callback="pickup",
+                delivery_type_yandex_callback="yandex",
+                delivery_type_courier_callback="delivery_courier",
+                delivery_method_state=DELIVERY_METHOD_STATE,
+            )
+            assert result == 9
+            mock_courier.assert_awaited_once_with(mock_update, mock_context, "back", DELIVERY_METHOD_STATE)
 
 
 class TestHandleSelfPickup:
