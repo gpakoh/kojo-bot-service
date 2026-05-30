@@ -20,18 +20,34 @@ from tg_bot.handlers.info import (
     handle_title_creation_input,
     handle_content_input,
     cancel_cms,
+    start_edit_page,
+    delete_page_handler,
+    ask_edit_title,
+    ask_edit_content,
+    ask_edit_order,
+    start_quick_rename,
+    handle_rename_input,
+    handle_order_input,
     info_cms_conversation,
     AWAITING_TITLE,
+    AWAITING_RENAME,
+    AWAITING_ORDER,
     AWAITING_CONTENT,
 )
 from tg_bot.keyboards import (
-    CB_INFO_MENU,
-    CB_PREFIX_INFO_GO,
-    CB_PREFIX_INFO_ADD,
+    CB_EDIT_CONTENT,
+    CB_EDIT_ORDER,
+    CB_EDIT_TITLE,
     CB_CMS_MODE_TOGGLE,
     CB_CMS_ITEM_OPTS,
-    CB_CMS_MOVE_UP,
     CB_CMS_MOVE_DOWN,
+    CB_CMS_MOVE_UP,
+    CB_CMS_RENAME,
+    CB_INFO_MENU,
+    CB_PREFIX_INFO_ADD,
+    CB_PREFIX_INFO_DEL,
+    CB_PREFIX_INFO_EDIT,
+    CB_PREFIX_INFO_GO,
 )
 import telegram
 
@@ -377,33 +393,275 @@ class TestCancelCMS:
         assert "cms_action" not in staff_context.user_data
 
 
-class TestCMSConversation:
-    def test_conversation_has_required_states(self) -> None:
-        assert AWAITING_TITLE in info_cms_conversation.states
-        assert AWAITING_CONTENT in info_cms_conversation.states
+class TestStartEditPage:
+    @pytest.mark.asyncio
+    async def test_shows_edit_submenu(self, mock_update: MagicMock, staff_context: MagicMock) -> None:
+        info_service = staff_context.bot_data["info_service"]
+        mock_update.callback_query.data = f"{CB_PREFIX_INFO_EDIT}5"
+        info_service.get_page.return_value = {
+            "id": 5, "title": "Контакты", "body_text": "Мы тут",
+            "image_id": None, "parent_id": None,
+        }
 
-    def test_conversation_has_entry_point(self) -> None:
-        assert len(info_cms_conversation.entry_points) == 1
-        handler = info_cms_conversation.entry_points[0]
-        assert isinstance(handler, CallbackQueryHandler)
-        assert callable(handler.callback)
+        result = await start_edit_page(mock_update, staff_context)
 
-    def test_conversation_has_title_handler(self) -> None:
-        handlers = info_cms_conversation.states[AWAITING_TITLE]
+        assert result == ConversationHandler.END
+        assert staff_context.user_data["cms_page_id"] == 5
+        mock_update.callback_query.edit_message_text.assert_called_once()
+        text = mock_update.callback_query.edit_message_text.call_args[0][0]
+        assert "Контакты" in text
+
+    @pytest.mark.asyncio
+    async def test_returns_to_menu_when_page_missing(self, mock_update: MagicMock, staff_context: MagicMock) -> None:
+        info_service = staff_context.bot_data["info_service"]
+        mock_update.callback_query.data = f"{CB_PREFIX_INFO_EDIT}99"
+        info_service.get_page.return_value = None
+        info_service.get_children.return_value = []
+
+        result = await start_edit_page(mock_update, staff_context)
+
+        assert result == ConversationHandler.END
+
+
+class TestDeletePageHandler:
+    @pytest.mark.asyncio
+    async def test_deletes_page(self, mock_update: MagicMock, staff_context: MagicMock) -> None:
+        info_service = staff_context.bot_data["info_service"]
+        mock_update.callback_query.data = f"{CB_PREFIX_INFO_DEL}5"
+        info_service.get_page.return_value = None
+        info_service.get_children.return_value = []
+
+        result = await delete_page_handler(mock_update, staff_context)
+
+        assert result == ConversationHandler.END
+        info_service.delete_page.assert_called_once_with(5)
+
+    @pytest.mark.asyncio
+    async def test_tolerates_already_deleted(self, mock_update: MagicMock, staff_context: MagicMock) -> None:
+        info_service = staff_context.bot_data["info_service"]
+        mock_update.callback_query.data = f"{CB_PREFIX_INFO_DEL}99"
+        info_service.delete_page.side_effect = None
+        info_service.get_page.return_value = None
+        info_service.get_children.return_value = []
+
+        result = await delete_page_handler(mock_update, staff_context)
+
+        assert result == ConversationHandler.END
+
+
+class TestAskEditTitle:
+    @pytest.mark.asyncio
+    async def test_sets_action_and_returns_state(self, mock_update: MagicMock, staff_context: MagicMock) -> None:
+        staff_context.user_data["cms_page_id"] = 5
+
+        result = await ask_edit_title(mock_update, staff_context)
+
+        assert result == AWAITING_RENAME
+        assert staff_context.user_data["cms_action"] == "edit_title"
+
+
+class TestStartQuickRename:
+    @pytest.mark.asyncio
+    async def test_sets_action_and_page_id(self, mock_update: MagicMock, staff_context: MagicMock) -> None:
+        mock_update.callback_query.data = f"{CB_CMS_RENAME}5"
+
+        result = await start_quick_rename(mock_update, staff_context)
+
+        assert result == AWAITING_RENAME
+        assert staff_context.user_data["cms_action"] == "edit_title"
+        assert staff_context.user_data["cms_page_id"] == 5
+
+
+class TestHandleRenameInput:
+    @pytest.mark.asyncio
+    async def test_updates_title(self, message_update: MagicMock, staff_context: MagicMock) -> None:
+        info_service = staff_context.bot_data["info_service"]
+        message_update.message.text = "Новое название"
+        staff_context.user_data["cms_page_id"] = 5
+        info_service.update_page_title = AsyncMock()
+
+        result = await handle_rename_input(message_update, staff_context)
+
+        assert result == ConversationHandler.END
+        info_service.update_page_title.assert_called_once_with(5, "Новое название")
+        assert "cms_action" not in staff_context.user_data
+
+    @pytest.mark.asyncio
+    async def test_rejects_empty(self, message_update: MagicMock, staff_context: MagicMock) -> None:
+        message_update.message.text = ""
+
+        result = await handle_rename_input(message_update, staff_context)
+
+        assert result == AWAITING_RENAME
+
+    @pytest.mark.asyncio
+    async def test_rejects_long(self, message_update: MagicMock, staff_context: MagicMock) -> None:
+        message_update.message.text = "A" * 101
+
+        result = await handle_rename_input(message_update, staff_context)
+
+        assert result == AWAITING_RENAME
+
+
+class TestAskEditOrder:
+    @pytest.mark.asyncio
+    async def test_sets_action_and_returns_state(self, mock_update: MagicMock, staff_context: MagicMock) -> None:
+        result = await ask_edit_order(mock_update, staff_context)
+
+        assert result == AWAITING_ORDER
+        assert staff_context.user_data["cms_action"] == "edit_order"
+
+
+class TestHandleOrderInput:
+    @pytest.mark.asyncio
+    async def test_updates_order(self, message_update: MagicMock, staff_context: MagicMock) -> None:
+        info_service = staff_context.bot_data["info_service"]
+        message_update.message.text = "3"
+        staff_context.user_data["cms_page_id"] = 5
+        info_service.update_page_order = AsyncMock()
+
+        result = await handle_order_input(message_update, staff_context)
+
+        assert result == ConversationHandler.END
+        info_service.update_page_order.assert_called_once_with(5, 3)
+
+    @pytest.mark.asyncio
+    async def test_rejects_non_number(self, message_update: MagicMock, staff_context: MagicMock) -> None:
+        message_update.message.text = "abc"
+
+        result = await handle_order_input(message_update, staff_context)
+
+        assert result == AWAITING_ORDER
+
+
+class TestHandleContentInputEdit:
+    @pytest.mark.asyncio
+    async def test_edits_text_content(self, message_update: MagicMock, staff_context: MagicMock) -> None:
+        info_service = staff_context.bot_data["info_service"]
+        staff_context.user_data["cms_action"] = "edit_content"
+        staff_context.user_data["cms_page_id"] = 5
+        message_update.message.text = "Обновлённый текст"
+        info_service.get_page = AsyncMock(return_value={
+            "id": 5, "title": "Контакты", "body_text": "Старый текст", "image_id": "photo123",
+        })
+        info_service.update_page_content = AsyncMock()
+
+        result = await handle_content_input(message_update, staff_context)
+
+        assert result == ConversationHandler.END
+        info_service.update_page_content.assert_called_once_with(5, "Обновлённый текст", "photo123")
+
+    @pytest.mark.asyncio
+    async def test_skip_clears_text_keeps_photo(self, message_update: MagicMock, staff_context: MagicMock) -> None:
+        info_service = staff_context.bot_data["info_service"]
+        staff_context.user_data["cms_action"] = "edit_content"
+        staff_context.user_data["cms_page_id"] = 5
+        message_update.message.text = "/skip"
+        info_service.get_page = AsyncMock(return_value={
+            "id": 5, "title": "Контакты", "body_text": "Старый текст", "image_id": "photo123",
+        })
+        info_service.update_page_content = AsyncMock()
+
+        result = await handle_content_input(message_update, staff_context)
+
+        assert result == ConversationHandler.END
+        info_service.update_page_content.assert_called_once_with(5, "", "photo123")
+
+    @pytest.mark.asyncio
+    async def test_del_photo_clears_photo(self, message_update: MagicMock, staff_context: MagicMock) -> None:
+        info_service = staff_context.bot_data["info_service"]
+        staff_context.user_data["cms_action"] = "edit_content"
+        staff_context.user_data["cms_page_id"] = 5
+        message_update.message.text = "/del_photo"
+        info_service.get_page = AsyncMock(return_value={
+            "id": 5, "title": "Контакты", "body_text": "Текст", "image_id": "photo123",
+        })
+        info_service.update_page_content = AsyncMock()
+
+        result = await handle_content_input(message_update, staff_context)
+
+        assert result == ConversationHandler.END
+        info_service.update_page_content.assert_called_once_with(5, "Текст", None)
+
+    @pytest.mark.asyncio
+    async def test_edits_photo_content(self, message_update: MagicMock, staff_context: MagicMock) -> None:
+        info_service = staff_context.bot_data["info_service"]
+        staff_context.user_data["cms_action"] = "edit_content"
+        staff_context.user_data["cms_page_id"] = 5
+        message_update.message.text = None
+        message_update.message.caption = "Новое фото"
+        message_update.message.photo = [MagicMock(), MagicMock()]
+        message_update.message.photo[-1].file_id = "AgNewPhoto"
+        info_service.get_page = AsyncMock(return_value={
+            "id": 5, "title": "Контакты", "body_text": "Старый текст", "image_id": "photo123",
+        })
+        info_service.update_page_content = AsyncMock()
+
+        result = await handle_content_input(message_update, staff_context)
+
+        assert result == ConversationHandler.END
+        info_service.update_page_content.assert_called_once_with(5, "Новое фото", "AgNewPhoto")
+
+
+class TestAskEditContent:
+    @pytest.mark.asyncio
+    async def test_shows_current_content(self, mock_update: MagicMock, staff_context: MagicMock) -> None:
+        info_service = staff_context.bot_data["info_service"]
+        staff_context.user_data["cms_page_id"] = 5
+        info_service.get_page.return_value = {
+            "id": 5, "title": "Контакты", "body_text": "<b>Адрес:</b> ул. Примерная",
+            "image_id": "photo123", "parent_id": None,
+        }
+
+        result = await ask_edit_content(mock_update, staff_context)
+
+        assert result == AWAITING_CONTENT
+        assert staff_context.user_data["cms_action"] == "edit_content"
+
+    @pytest.mark.asyncio
+    async def test_shows_empty_when_no_text(self, mock_update: MagicMock, staff_context: MagicMock) -> None:
+        info_service = staff_context.bot_data["info_service"]
+        staff_context.user_data["cms_page_id"] = 5
+        info_service.get_page.return_value = {
+            "id": 5, "title": "Пусто", "body_text": None, "image_id": None, "parent_id": None,
+        }
+
+        result = await ask_edit_content(mock_update, staff_context)
+
+        assert result == AWAITING_CONTENT
+
+
+class TestCMSConversationEdit:
+    def test_conversation_has_all_states(self) -> None:
+        for state in (AWAITING_TITLE, AWAITING_RENAME, AWAITING_ORDER, AWAITING_CONTENT):
+            assert state in info_cms_conversation.states
+
+    def test_conversation_has_seven_entry_points(self) -> None:
+        assert len(info_cms_conversation.entry_points) == 7
+        for handler in info_cms_conversation.entry_points:
+            assert isinstance(handler, CallbackQueryHandler)
+            assert callable(handler.callback)
+
+    def test_conversation_has_rename_state(self) -> None:
+        handlers = info_cms_conversation.states[AWAITING_RENAME]
         assert len(handlers) == 1
         h = handlers[0]
         assert isinstance(h, MessageHandler)
         assert callable(h.callback)
 
-    def test_conversation_has_content_handler(self) -> None:
+    def test_conversation_has_order_state(self) -> None:
+        handlers = info_cms_conversation.states[AWAITING_ORDER]
+        assert len(handlers) == 1
+        h = handlers[0]
+        assert isinstance(h, MessageHandler)
+        assert callable(h.callback)
+
+    def test_conversation_has_three_content_handlers(self) -> None:
         handlers = info_cms_conversation.states[AWAITING_CONTENT]
-        assert len(handlers) == 2
-        msg_handler, skip_handler = handlers
+        assert len(handlers) == 3
+        msg_handler, skip_handler, del_photo_handler = handlers
         assert isinstance(msg_handler, MessageHandler)
         assert isinstance(skip_handler, CommandHandler)
-
-    def test_conversation_has_cancel_fallback(self) -> None:
-        assert len(info_cms_conversation.fallbacks) == 1
-        handler = info_cms_conversation.fallbacks[0]
-        assert isinstance(handler, CommandHandler)
-        assert "cancel" in handler.commands
+        assert isinstance(del_photo_handler, CommandHandler)
+        assert "skip" in skip_handler.commands
+        assert "del_photo" in del_photo_handler.commands
