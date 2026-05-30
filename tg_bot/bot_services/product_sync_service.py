@@ -251,7 +251,7 @@ async def _get_variant_from_llm(name: str, task_type: str) -> str:
 
     return ""
 
-async def _process_single_product_directory(conn: asyncpg.Connection, product_dir: Path, search_recache: bool = False) -> str:
+async def _process_single_product_directory(conn: asyncpg.Connection, product_dir: Path, search_recache: bool = False, tenant_id: str = "") -> str:
     """Обрабатывает папку товара: парсит, обогащает поиск, пишет в БД."""
     file_path = product_dir / "product.txt"
     parsed_data = parse_product_file(file_path)
@@ -332,12 +332,13 @@ async def _process_single_product_directory(conn: asyncpg.Connection, product_di
     # Используем search_variants колонку (нужно добавить в бд: alter table products add column search_variants text)
     product_id = await conn.fetchval(
         """
-        INSERT INTO products (name, short_description, full_description, chapters, images, is_available, search_variants)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        ON CONFLICT (name) DO UPDATE SET
-        short_description = $2, full_description = $3, chapters = $4, images = $5, is_available = $6, search_variants = $7
+        INSERT INTO products (tenant_id, name, short_description, full_description, chapters, images, is_available, search_variants)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (tenant_id, name) DO UPDATE SET
+        short_description = $3, full_description = $4, chapters = $5, images = $6, is_available = $7, search_variants = $8
         RETURNING id;
         """,
+        tenant_id,
         product_name, parsed_data.get('short_description', ''), parsed_data.get('full_description', ''),
         [c.strip() for c in parsed_data.get('chapters', '').split(',')] if parsed_data.get('chapters') else [],
         images, parsed_data.get('sale', 'False').lower() == 'true',
@@ -414,7 +415,7 @@ async def sync_products(pool: asyncpg.Pool, tenant_id: str = "") -> Any:
             async with pool.acquire() as conn:
                 if tenant_id:
                     await conn.execute("SELECT set_tenant_context($1)", tenant_id)
-                rag_part = await _process_single_product_directory(conn, product_dir, search_recache)
+                rag_part = await _process_single_product_directory(conn, product_dir, search_recache, tenant_id=tenant_id)
                 rag_content_parts.append(rag_part)
 
                 await conn.execute(

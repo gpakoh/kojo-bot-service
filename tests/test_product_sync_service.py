@@ -78,3 +78,10 @@ def test_product_sync_service_documents_raw_pool_bypass():
     assert "system-level catalog operation" in source
     assert "raw pool instead of tenant-scoped connections" in source
     assert "db_manager.tenant_connection" not in source
+
+
+def test_product_sync_insert_is_tenant_scoped():
+    source = Path("tg_bot/bot_services/product_sync_service.py").read_text(encoding="utf-8")
+
+    assert "ON CONFLICT (tenant_id, name)" in source
+    assert "INSERT INTO products (tenant_id," in source
