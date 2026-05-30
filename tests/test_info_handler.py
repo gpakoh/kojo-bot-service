@@ -55,9 +55,13 @@ import telegram
 @pytest.fixture()
 def mock_context() -> MagicMock:
     ctx = MagicMock(spec=ContextTypes.DEFAULT_TYPE)
+    user_service = AsyncMock()
+    user_service.get_user = AsyncMock()
+    user_service.has_staff_privileges = AsyncMock()
+    user_service.save_registration_message_id = AsyncMock()
     ctx.bot_data = {
         "info_service": AsyncMock(),
-        "user_service": AsyncMock(),
+        "user_service": user_service,
     }
     ctx.user_data = {}
     ctx.bot = AsyncMock()
@@ -148,8 +152,14 @@ class TestShowInfoMenu:
 
         mock_update.callback_query.message.photo = None
         mock_update.callback_query.edit_message_text.side_effect = telegram.error.TelegramError("edit failed")
+        mock_context.bot.send_message = AsyncMock()
+        mock_context.bot.send_message.return_value = MagicMock(message_id=999)
 
         await show_info_menu(mock_update, mock_context)
+
+        assert mock_context.bot.send_message.called
+        call_kwargs = mock_context.bot.send_message.call_args[1]
+        assert "Информационные страницы пока не добавлены" in call_kwargs.get("text", "")
 
     @pytest.mark.asyncio
     async def test_handler_registration(self) -> None:

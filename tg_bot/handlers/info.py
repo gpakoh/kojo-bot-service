@@ -33,6 +33,7 @@ from tg_bot.keyboards import (
     get_cms_keyboard,
 )
 from tg_bot.decorators import auth_guard
+from tg_bot.handlers.common import cleanup_previous_menu
 
 import logging
 logger = logging.getLogger(__name__)
@@ -127,7 +128,26 @@ async def _render_page_content(
     elif image_id:
         if has_old_photo:
             media = InputMediaPhoto(media=image_id, caption=text[:1024], parse_mode=ParseMode.HTML)
-            await query.edit_message_media(media=media, reply_markup=reply_markup)
+            try:
+                await query.edit_message_media(media=media, reply_markup=reply_markup)
+            except (ValueError, KeyError, telegram.error.TelegramError) as exc:
+                logger.warning("Failed to edit media in _render_page_content: %s", exc)
+                photo_msg = await context.bot.send_photo(
+                    chat_id=update.effective_chat.id,
+                    photo=image_id,
+                    caption=text[:1024],
+                    reply_markup=reply_markup,
+                    parse_mode=ParseMode.HTML,
+                )
+                context.user_data['last_global_menu_id'] = photo_msg.message_id
+                if user_service:
+                    await user_service.save_registration_message_id(user_id, photo_msg.message_id)
+                if query and query.message:
+                    try:
+                        await query.message.delete()
+                    except (ValueError, KeyError, telegram.error.TelegramError):
+                        pass
+                await cleanup_previous_menu(context, update.effective_chat.id, exclude_id=photo_msg.message_id)
 
             if stale_photo_id:
                 try:
@@ -190,8 +210,19 @@ async def _render_page_content(
                     parse_mode=ParseMode.HTML,
                     disable_web_page_preview=True
                 )
-            except (ValueError, KeyError, telegram.error.TelegramError):
-                pass
+            except (ValueError, KeyError, telegram.error.TelegramError) as exc:
+                logger.warning("Failed to edit text in _render_page_content: %s", exc)
+                message = await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode=ParseMode.HTML,
+                    disable_web_page_preview=True,
+                )
+                context.user_data['last_global_menu_id'] = message.message_id
+                if user_service:
+                    await user_service.save_registration_message_id(user_id, message.message_id)
+                await cleanup_previous_menu(context, update.effective_chat.id, exclude_id=message.message_id)
 
             if stale_photo_id:
                 try:
