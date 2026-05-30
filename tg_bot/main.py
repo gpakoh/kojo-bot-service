@@ -111,7 +111,8 @@ from tg_bot.handlers.ai_chat import (
     start_ai_chat,
 )
 from tg_bot.handlers.common import cleanup_previous_menu, handle_stale_callback
-from tg_bot.handlers.info import info_conversation
+from tg_bot.handlers.info import show_info_menu
+from tg_bot.keyboards import CB_INFO_MENU, CB_PREFIX_INFO_GO
 from tg_bot.handlers.order import order_handler
 from tg_bot.handlers.registration import (
     handle_approval_callback,
@@ -826,7 +827,7 @@ async def main() -> None:
     application.add_handler(registration_handler)
     application.add_handler(order_handler)
     application.add_handler(staff_reply_handler)
-    application.add_handler(info_conversation)
+    application.add_handler(CallbackQueryHandler(show_info_menu, pattern=f"^{CB_INFO_MENU}$|^{CB_PREFIX_INFO_GO}"))
     application.add_handler(user_support_handler)
     application.add_handler(cancellation_handler)
     application.add_handler(order_comment_handler)
