@@ -5,6 +5,8 @@ Revises: 004_event_store
 Create Date: 2026-05-07
 
 """
+import os
+
 import sqlalchemy as sa
 
 from alembic import op
@@ -23,6 +25,9 @@ TABLES = [
 
 
 def upgrade() -> None:
+    enable_force_rls = os.getenv("KOJO_ENABLE_FORCE_RLS", "").lower() in {"1", "true", "yes"}
+    print(f"KOJO_ENABLE_FORCE_RLS={enable_force_rls}; RLS enforcement will be {'enabled' if enable_force_rls else 'disabled'}")
+
     # 1. Add Tenant_id To All Tables
     for table in TABLES:
         op.add_column(
@@ -48,10 +53,14 @@ def upgrade() -> None:
     op.execute('ALTER TABLE bot_settings DROP CONSTRAINT IF EXISTS bot_settings_key_key')
     op.create_unique_constraint('uq_bot_settings_tenant_key', 'bot_settings', ['tenant_id', 'key'])
 
-    # 3. Enable RLS
+    # 3. Enable RLS (opt-in via KOJO_ENABLE_FORCE_RLS)
     for table in TABLES:
-        op.execute(f'ALTER TABLE {table} ENABLE ROW LEVEL SECURITY')
-        op.execute(f'ALTER TABLE {table} FORCE ROW LEVEL SECURITY')
+        if enable_force_rls:
+            op.execute(f'ALTER TABLE {table} ENABLE ROW LEVEL SECURITY')
+            op.execute(f'ALTER TABLE {table} FORCE ROW LEVEL SECURITY')
+        else:
+            op.execute(f'ALTER TABLE {table} DISABLE ROW LEVEL SECURITY')
+            op.execute(f'ALTER TABLE {table} NO FORCE ROW LEVEL SECURITY')
 
     # 4. Create RLS Policies
     for table in TABLES:

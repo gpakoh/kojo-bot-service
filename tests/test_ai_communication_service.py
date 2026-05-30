@@ -232,14 +232,11 @@ class TestAICommunicationService:
         assert forbidden not in result.lower(), f"Failed to sanitize: {payload}"
 
     @pytest.mark.asyncio
-    async def test_get_ai_answer_falls_back_to_quart_uses_middleware(self, service) -> Any:
-        """When LLM client fails, service should use RequestMiddleware.post for fallback."""
+    async def test_get_ai_answer_does_not_use_legacy_middleware_without_gateway(self, service) -> Any:
+        """When LLM client has no answer and gateway is absent, legacy middleware must not be used."""
 
         mock_middleware = MagicMock()
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json = MagicMock(return_value={"answer": "Test response"})
-        mock_middleware.post = AsyncMock(return_value=mock_response)
+        mock_middleware.post = AsyncMock()
 
         service._http_middleware = mock_middleware
 
@@ -249,42 +246,36 @@ class TestAICommunicationService:
 
         result = await service.get_ai_answer(123, "test topic", "testuser")
 
-        assert result == {"answer": "Test response"}
-        mock_middleware.post.assert_called_once()
+        assert result == {"answer": "⚠️ Сервис временно недоступен."}
+        mock_middleware.post.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_fallback_to_quart_calls_middleware(self, service) -> Any:
-        """_fallback_to_quart should call RequestMiddleware.post."""
+    async def test_fallback_to_quart_does_not_use_legacy_middleware_without_gateway(self, service) -> Any:
+        """_fallback_to_quart should not call legacy RequestMiddleware.post."""
 
         mock_middleware = MagicMock()
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json = MagicMock(return_value={"answer": "Fallback response"})
-        mock_middleware.post = AsyncMock(return_value=mock_response)
+        mock_middleware.post = AsyncMock()
 
         service._http_middleware = mock_middleware
 
         result = await service._fallback_to_quart(123, "test topic", "testuser")
 
-        assert result == {"answer": "Fallback response"}
-        mock_middleware.post.assert_called_once()
+        assert result == {"answer": "⚠️ Сервис временно недоступен."}
+        mock_middleware.post.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_get_semantic_retrieval_calls_middleware(self, service) -> Any:
-        """get_semantic_retrieval should call RequestMiddleware.post."""
+    async def test_get_semantic_retrieval_does_not_use_legacy_middleware_without_gateway(self, service) -> Any:
+        """get_semantic_retrieval should not call legacy middleware when gateway is absent."""
 
         mock_middleware = MagicMock()
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json = MagicMock(return_value={"context": ["### Товар: Test Product ###\nDescription"]})
-        mock_middleware.post = AsyncMock(return_value=mock_response)
+        mock_middleware.post = AsyncMock()
 
         service._http_middleware = mock_middleware
 
         result = await service.get_semantic_retrieval("coffee")
 
-        assert "Test Product" in result
-        mock_middleware.post.assert_called_once()
+        assert result == []
+        mock_middleware.post.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_semantic_retrieval_returns_empty_on_missing_middleware(self, service) -> Any:
@@ -295,18 +286,19 @@ class TestAICommunicationService:
         assert result == []
 
     @pytest.mark.asyncio
-    async def test_get_ai_answer_handles_indexing(self, service) -> Any:
-
-        mock_middleware = MagicMock()
+    async def test_get_ai_answer_handles_indexing_from_gateway(self, service) -> Any:
+        mock_gateway = MagicMock()
         mock_response = MagicMock()
         mock_response.status_code = 202
-        mock_middleware.post = AsyncMock(return_value=mock_response)
+        mock_gateway._request = AsyncMock(return_value=mock_response)
 
-        service._http_middleware = mock_middleware
+        service._gateway = mock_gateway
 
         mock_llm_client = MagicMock()
         mock_llm_client.chat_json = AsyncMock(return_value=None)
         service._llm_client = mock_llm_client
 
         result = await service.get_ai_answer(123, "test topic", "testuser")
+
         assert result["status"] == "indexing"
+        mock_gateway._request.assert_awaited_once()

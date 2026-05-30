@@ -13,7 +13,8 @@ def _make_user_service():
     return svc
 
 
-patch("tg_bot.decorators.get_from_context", return_value=_make_user_service()).start()
+_patch_get_from_context = patch("tg_bot.decorators.get_from_context", return_value=_make_user_service())
+_patch_get_from_context.start()
 
 from tg_bot.handlers.ai_chat import (
     handle_ai_history,
@@ -23,13 +24,15 @@ from tg_bot.handlers.ai_chat import (
     start_ai_chat,
 )
 
+_patch_get_from_context.stop()
+
 
 @pytest.fixture(autouse=True)
-def _setup_user_service(mock_context):
-    """Provide user_service for cleanup_previous_menu calls."""
-    mock_context.bot_data['user_service'] = MagicMock()
-    mock_context.bot_data['user_service'].get_user = AsyncMock(return_value=None)
-    mock_context.bot_data['user_service'].save_registration_message_id = AsyncMock()
+def _setup_user_service(mock_context, request):
+    user_service = _make_user_service()
+    mock_context.bot_data['user_service'] = user_service
+    mock_context.di = MagicMock()
+    mock_context.di.get = MagicMock(return_value=user_service)
 
 
 class TestStartAiChat:

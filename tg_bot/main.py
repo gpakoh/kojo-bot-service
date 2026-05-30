@@ -88,6 +88,7 @@ from tg_bot.bot_services.settings_service import SettingsService
 from tg_bot.bot_services.user_address_service import UserAddressService
 from tg_bot.bot_services.user_service import UserService
 from tg_bot.decorators import auth_guard
+from tg_bot.infrastructure.database import DatabaseManager
 from tg_bot.handlers.admin_panel import (
     admin_courier_handler,
     admin_logo_handler,
@@ -306,17 +307,19 @@ async def post_init(app: Application) -> Any:
     bot_id = SecretsLoader.get_required("BOT_ID_FOR_QUART")
 
     # Инициализация сервисов
-    app.bot_data['user_service'] = UserService(pool)
-    app.bot_data['product_service'] = ProductService(pool)
-    app.bot_data['order_service'] = OrderService(pool, idempotency_store=idempotency_store)
-    app.bot_data['communication_service'] = CommunicationService(pool)
+    db_manager = DatabaseManager(pool)
+    app.bot_data['db_manager'] = db_manager
+    app.bot_data['user_service'] = UserService(pool, db_manager=db_manager)
+    app.bot_data['product_service'] = ProductService(pool, db_manager=db_manager)
+    app.bot_data['order_service'] = OrderService(pool, idempotency_store=idempotency_store, db_manager=db_manager)
+    app.bot_data['communication_service'] = CommunicationService(pool, db_manager=db_manager)
 
-    address_service = UserAddressService(pool)
+    address_service = UserAddressService(pool, db_manager=db_manager)
     await address_service.init_table() # Создаем таблицу, если нет
     app.bot_data['address_service'] = address_service
 
     # 1. сначала favorites
-    fav_service = FavoriteService(pool)
+    fav_service = FavoriteService(pool, db_manager=db_manager)
     await fav_service.init_table()
     app.bot_data['favorite_service'] = fav_service
 
@@ -331,9 +334,9 @@ async def post_init(app: Application) -> Any:
         idempotency_store=idempotency_store,
     )
 
-    app.bot_data['settings_service'] = SettingsService(pool)
-    app.bot_data['cart_service'] = CartService(pool)
-    app.bot_data['info_service'] = InfoService(pool)
+    app.bot_data['settings_service'] = SettingsService(pool, db_manager=db_manager)
+    app.bot_data['cart_service'] = CartService(pool, db_manager=db_manager)
+    app.bot_data['info_service'] = InfoService(pool, db_manager=db_manager)
 
     # Вставить после инициализации info_service
     # Create Gatewayclient For AI Communication With Circuit Breaker + HMAC
@@ -674,7 +677,7 @@ async def main() -> None:
     TOKEN = SecretsLoader.get_required("BOT_TOKEN")
 
     # Сброс персистентности (если нужно)
-    persistence_path = Path("bot_persistence.pickle")
+    persistence_path = Path(os.getenv("BOT_PERSISTENCE_PATH", "/app/data/bot_persistence.pickle"))
     if os.environ.get("RESET_PERSISTENCE", "false").lower() == "true":
         if persistence_path.exists():
             try:
@@ -918,7 +921,7 @@ async def main() -> None:
     internal_port = SecretsLoader.get_int("BOT_INTERNAL_PORT", 8080)
     public_url = SecretsLoader.get("WEBHOOK_PUBLIC_URL")
     secret_token = SecretsLoader.get("WEBHOOK_SECRET_TOKEN")
-    logger.info(f"[DEBUG] WEBHOOK_PUBLIC_URL raw='{public_url}' len={len(public_url)}")
+    logger.info("[DEBUG] WEBHOOK_PUBLIC_URL configured=%s len=%s", bool(public_url), len(public_url or ""))
 
     if not public_url:
         logger.warning("⚠️ webhook_public_url не задан — бот работает в listener mode без публичного url")

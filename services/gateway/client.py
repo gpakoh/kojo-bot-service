@@ -20,7 +20,7 @@ from services.gateway.circuit_breaker import (
 )
 from services.gateway.retry_policy import RetryConfig, RetryPolicy
 from tg_bot.infrastructure.correlation import get_correlation_id
-from tg_bot.infrastructure.hmac_signing import sign_payload
+from tg_bot.infrastructure.hmac_signing import HMACNonceManager, sign_payload
 from tg_bot.infrastructure.metrics import kojo_llm_latency_seconds, observe_latency
 
 logger = logging.getLogger(__name__)
@@ -129,6 +129,8 @@ class GatewayClient:
             headers["Authorization"] = f"Bearer {self.api_key}"
         if self.federation_secret and payload:
             headers["X-Federation-Signature"] = sign_payload(self.federation_secret, payload)
+            headers["X-Federation-Timestamp"] = str(HMACNonceManager.generate_timestamp())
+            headers["X-Federation-Nonce"] = HMACNonceManager.generate_nonce()
         if extra:
             headers.update(extra)
         return headers

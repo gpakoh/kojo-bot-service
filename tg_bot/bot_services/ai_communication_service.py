@@ -97,14 +97,14 @@ class AICommunicationService:
                 if result is not None:
                     return result
             except (RuntimeError, ConnectionError, TimeoutError, OSError) as e:
-                logger.warning(f"LLM client failed: {e}, falling back to middleware")
+                logger.warning(f"LLM client failed: {e}, falling back to gateway")
 
-        # 2. fallback через http middleware
+        # 2. fallback через gateway
         return await self._fallback_to_quart(user_id, topic, nickname)
 
     async def _fallback_to_quart(self, user_id: int, topic: str, nickname: str) -> dict[str, Any]:
-        """Fallback к Quart серверу через HTTP middleware."""
-        logger.info(f"[AI-Service] Fallback to Quart for {user_id}")
+        """Fallback к Quart серверу через gateway."""
+        logger.info("[AI-Service] Quart request for user_id=%s", user_id)
 
         data = {
             "bot_id": self.bot_id,
@@ -121,22 +121,11 @@ class AICommunicationService:
                     return {"status": "indexing", "answer": "⚙️ База знаний обновляется..."}
                 return cast(dict[str, Any], response.json())
             except CircuitOpenError:
-                logger.warning("Circuit Open For Quart, Falling Back To Middleware")
+                logger.warning("Circuit Open For Quart")
             except (RuntimeError, ConnectionError, TimeoutError, OSError) as e:
-                logger.error(f"Gateway Quart request failed: {e}, falling back to middleware")
+                logger.error(f"Gateway Quart request failed: {e}")
 
-        # Fallback: Legacy Http Middleware
-        if self._http_middleware:
-            try:
-                response = await self._http_middleware.post(self.quart_url, json=data)
-                if response.status_code == 202:
-                    return {"status": "indexing", "answer": "⚙️ База знаний обновляется..."}
-                response.raise_for_status()
-                return response.json()
-            except (RuntimeError, ConnectionError, TimeoutError, OSError) as e:
-                logger.error(f"Fallback to Quart failed: {e}")
-                return {"answer": "⚠️ Ошибка при обращении к серверу."}
-
+        logger.error("AI Quart request unavailable: gateway is not configured or failed")
         return {"answer": "⚠️ Сервис временно недоступен."}
 
     async def get_semantic_retrieval(self, query: str) -> list[str]:
@@ -158,32 +147,11 @@ class AICommunicationService:
 
                 return product_names if product_names else context  # type: ignore[no-any-return]
             except CircuitOpenError:
-                logger.warning("Circuit Open For Semantic Retrieval, Falling Back To Middleware")
+                logger.warning("Circuit Open For Semantic Retrieval")
             except (RuntimeError, ConnectionError, TimeoutError, OSError) as e:
-                logger.error(f"Gateway semantic retrieval failed: {e}, falling back to middleware")
+                logger.error(f"Gateway semantic retrieval failed: {e}")
 
-        # Fallback: Legacy Http Middleware
-        if self._http_middleware:
-            try:
-                response = await self._http_middleware.post(
-                    f"{self.quart_url}/semantic",
-                    json={"query": query}
-                )
-                response.raise_for_status()
-                data = cast(dict[str, Any], response.json())
-                context = data.get("context", [])
-
-                product_names = []
-                for chunk in context:
-                    match = re.search(r"###\s*Товар:\s*(.*?)\s*###", chunk, re.IGNORECASE)
-                    if match:
-                        product_names.append(match.group(1).strip())
-
-                return product_names if product_names else context
-            except (RuntimeError, ConnectionError, TimeoutError, OSError) as e:
-                logger.error(f"Semantic retrieval failed: {e}")
-                return []
-
+        logger.error("Semantic retrieval unavailable: gateway is not configured or failed")
         return []
 
 
