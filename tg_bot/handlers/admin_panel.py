@@ -32,6 +32,7 @@ from tg_bot.callback_validator import validate_callback
 from tg_bot.decorators import auth_guard
 from tg_bot.domain.order import OrderStatus as DomainOrderStatus
 from tg_bot.handlers.common import cleanup_previous_menu
+from tg_bot.handlers.order_notifications import notify_user_order_status_changed
 from tg_bot.handlers.staff import show_stats
 
 # Клавиатуры и коллбэк-префиксы
@@ -825,16 +826,12 @@ async def handle_order_action(update: Update, context: ContextTypes.DEFAULT_TYPE
             asyncio.create_task(create_delivery_request(updated_order, items, context))
 
         # 6. уведомление пользователя
-        try:
-            # В markdownv2 или html. для надежности используем html, как в остальных частях
-            user_msg = f"🔔 Статус вашего заказа <b>#{order_id}</b> изменен на: <b>{new_status.value}</b>"
-            await context.bot.send_message(
-                chat_id=updated_order.user_id,
-                text=user_msg,
-                parse_mode=ParseMode.HTML
-            )
-        except (ConnectionError, TimeoutError, OSError) as e:
-            logger.warning(f"Could not notify user {updated_order.user_id}: {e}")
+        await notify_user_order_status_changed(
+            context=context,
+            user_id=updated_order.user_id,
+            order_id=order_id,
+            new_status=new_status.value,
+        )
 
         # 7. обновляем интерфейс админа (одно окно)
         await query.answer(f"Статус: {new_status.value}")
