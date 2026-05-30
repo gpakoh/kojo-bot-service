@@ -229,7 +229,7 @@ async def _notify_admins_about_new_order(
                 reply_markup=markup,
                 parse_mode='HTML',
             )
-        except Exception as exc:
+        except telegram.error.TelegramError as exc:
             logger.warning("Failed to notify admin %s about new order %s: %s", target_id, order.id, exc)
 
 
