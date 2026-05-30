@@ -292,6 +292,37 @@ class DatabaseManager:
                 await conn.execute("SELECT set_tenant_context($1)", tenant_id)
             yield conn
 
+    async def check_runtime_role_rls_safe(self) -> dict[str, bool | str]:
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT
+                    current_user AS role_name,
+                    rolsuper AS is_superuser,
+                    rolbypassrls AS bypasses_rls
+                FROM pg_roles
+                WHERE rolname = current_user
+                """
+            )
+
+        if row is None:
+            return {
+                "role_name": "unknown",
+                "is_superuser": True,
+                "bypasses_rls": True,
+                "safe_for_rls": False,
+            }
+
+        is_superuser = bool(row["is_superuser"])
+        bypasses_rls = bool(row["bypasses_rls"])
+
+        return {
+            "role_name": str(row["role_name"]),
+            "is_superuser": is_superuser,
+            "bypasses_rls": bypasses_rls,
+            "safe_for_rls": not is_superuser and not bypasses_rls,
+        }
+
     async def execute(self, query: str, *args: object) -> str:
         async with self._pool.acquire() as conn:
             result = await conn.execute(query, *args)

@@ -162,6 +162,19 @@ Redis-backup не требуется — данные Redis восстанавл
 - **Redis недоступен** — бот стартует, но с warning `Redis unavailable, using in-memory fallback`. Решение: проверить `redis-cli ping`, запустить контейнер Redis.
 - **alembic migration failed** — ошибка применения миграций. Решение: проверить последовательность версий, выполнить `alembic downgrade -1`, исправить, повторить.
 - **RLS migration safety** — `KOJO_ENABLE_FORCE_RLS` отключён по умолчанию. Не включать `KOJO_ENABLE_FORCE_RLS=true`, пока production DB access paths не устанавливают `app.current_tenant` для каждого соединения. Если RLS включить до полной проводки tenant context, запросы к tenant-таблицам могут не возвращать строк или падать.
+
+### RLS FORCE rollout
+
+`KOJO_ENABLE_FORCE_RLS=false` — безопасное значение по умолчанию.
+
+Установить `KOJO_ENABLE_FORCE_RLS=true` можно только для test/staging dry-run после того, как весь tenant-aware DB access проверен. Не включать на production, пока все system-level bypasses (`ProductSyncService`, `CQRS`, `EventStore`) явно не ревьюированы.
+
+#### Проверка runtime role
+
+Before enabling `KOJO_ENABLE_FORCE_RLS=true`, verify that the runtime database role is not a PostgreSQL superuser and does not have `BYPASSRLS`.
+
+A role with `SUPERUSER` or `BYPASSRLS` bypasses row-level security even when `FORCE ROW LEVEL SECURITY` is enabled. The application performs this check at startup — if the role is unsafe, it raises `RuntimeError` with the current role name and privileges.
+
 - **docker network conflict** — `network already exists` или `overlay network not found`. Решение: `docker network prune` или `docker compose down && docker compose up`.
 - **GitHub mirror не синхронизирован** — зеркало отстаёт от Gitea. Решение: выполнить explicit SHA push: `git push github $(git rev-parse HEAD):main`.
 - **CI не прошёл** — мерж заблокирован branch protection. Решение: исправить ошибки в новой ветке, дождаться зелёного CI, обновить PR.

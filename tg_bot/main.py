@@ -309,6 +309,22 @@ async def post_init(app: Application) -> Any:
     # Инициализация сервисов
     db_manager = DatabaseManager(pool)
     app.bot_data['db_manager'] = db_manager
+
+    if os.getenv("KOJO_ENABLE_FORCE_RLS", "").strip().lower() in {"1", "true", "yes", "on"}:
+        role_check = await db_manager.check_runtime_role_rls_safe()
+        if not role_check["safe_for_rls"]:
+            raise RuntimeError(
+                "KOJO_ENABLE_FORCE_RLS=true requires a runtime database role "
+                "without SUPERUSER or BYPASSRLS privileges. "
+                f"Current role={role_check['role_name']}, "
+                f"is_superuser={role_check['is_superuser']}, "
+                f"bypasses_rls={role_check['bypasses_rls']}."
+            )
+        logger.info(
+            "RLS FORCE runtime role is safe: "
+            f"role={role_check['role_name']}, "
+            f"bypasses_rls={role_check['bypasses_rls']}"
+        )
     app.bot_data['user_service'] = UserService(pool, db_manager=db_manager)
     app.bot_data['product_service'] = ProductService(pool, db_manager=db_manager)
     app.bot_data['order_service'] = OrderService(pool, idempotency_store=idempotency_store, db_manager=db_manager)
