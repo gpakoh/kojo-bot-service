@@ -341,6 +341,24 @@ class OrderService:
                 """,
                 comment, order_id
             )
+
+    async def set_order_rating(self, order_id: int, rating: int) -> Any:
+        """Сохраняет оценку пользователя для заказа."""
+        logger.info(f"Сохранение оценки {rating} для заказа #{order_id}")
+        async with self._connection() as conn:
+            await conn.execute(
+                "UPDATE orders SET rating = $1 WHERE id = $2",
+                rating, order_id
+            )
+
+    async def set_order_rating_comment(self, order_id: int, comment: str) -> Any:
+        """Сохраняет текстовый отзыв к оценке заказа."""
+        logger.info(f"Сохранение отзыва для заказа #{order_id}")
+        async with self._connection() as conn:
+            await conn.execute(
+                "UPDATE orders SET rating_comment = $1 WHERE id = $2",
+                comment, order_id
+            )
     async def _get_order_by_id(self, order_id: int) -> Optional[Order]:
         """Fetch a single order by ID from the database."""
         async with self._connection() as conn:

@@ -470,8 +470,7 @@ async def save_comment_to_order(update: Update, context: ContextTypes.DEFAULT_TY
     if rating_order_id:
         # Сохраняем отзыв (текст к звездам)
         logger.info(f"Saving feedback text for order #{rating_order_id}")
-        async with order_service.pool.acquire() as conn:
-            await conn.execute("UPDATE orders SET rating_comment = $1 WHERE id = $2", text, rating_order_id)
+        await order_service.set_order_rating_comment(rating_order_id, text)
 
         await send_or_edit_order_details(update, context, rating_order_id, force_msg_id=main_ui_msg_id)
         context.user_data.pop('rating_order_id', None)
@@ -896,8 +895,7 @@ async def set_order_rating(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     # 1. сохраняем только число в бд
     order_service: OrderService = context.bot_data['order_service']
-    async with order_service.pool.acquire() as conn:
-        await conn.execute("UPDATE orders SET rating = $1 WHERE id = $2", rating_val, order_id)
+    await order_service.set_order_rating(order_id, rating_val)
 
     # 2. устанавливаем контекст для текстового обработчика
     context.user_data['rating_order_id'] = order_id

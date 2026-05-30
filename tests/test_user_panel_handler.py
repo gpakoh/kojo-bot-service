@@ -547,13 +547,13 @@ class TestSaveCommentToOrder:
         mock_context.user_data["rating_order_id"] = 42
         mock_context.user_data["last_order_details_msg_id"] = 300
         mock_context.bot_data["order_service"] = AsyncMock()
-        mock_context.bot_data["order_service"].pool = mock_pool
+        mock_context.bot_data["order_service"].set_order_rating_comment = AsyncMock()
 
         with patch("tg_bot.handlers.user_panel.send_or_edit_order_details", AsyncMock()) as mock_send:
             result = await save_comment_to_order(mock_update, mock_context)
 
         assert result == _CONV_END
-        mock_context.bot_data["order_service"].pool.acquire.assert_called_once()
+        mock_context.bot_data["order_service"].set_order_rating_comment.assert_awaited_once_with(42, "отличный кофе!")
         mock_send.assert_awaited_once()
         msg.delete.assert_awaited_once()
 
