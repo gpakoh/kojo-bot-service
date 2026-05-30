@@ -10,8 +10,14 @@ from tg_bot.keyboards import (
     CB_INFO_MENU,
     CB_PREFIX_INFO_GO,
     CB_USER_SHOW_MAIN_MENU,
+    CB_CMS_MODE_TOGGLE,
+    CB_CMS_ITEM_OPTS,
+    CB_CMS_MOVE_UP,
+    CB_CMS_MOVE_DOWN,
+    get_cms_item_options_keyboard,
     get_cms_keyboard,
 )
+from tg_bot.decorators import auth_guard
 
 import logging
 logger = logging.getLogger(__name__)
@@ -195,6 +201,7 @@ async def show_info_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     info_service: InfoService = context.bot_data['info_service']
     is_staff = await _check_is_staff(context, update.effective_user.id)
+    edit_mode = bool(context.user_data.get("info_edit_mode"))
 
     current_page = await info_service.get_page(page_id) if page_id else None
     children = await info_service.get_children(page_id)
@@ -213,7 +220,7 @@ async def show_info_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         else:
             text = "ℹ️ <b>Информационные страницы пока не добавлены.</b>"
 
-    reply_markup = get_cms_keyboard(children, page_id, parent_id, is_staff)
+    reply_markup = get_cms_keyboard(children, page_id, parent_id, is_staff, edit_mode)
     image_id = current_page['image_id'] if current_page else None
 
     try:
@@ -245,3 +252,106 @@ async def show_info_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 await query.message.delete()
         except (ValueError, KeyError, telegram.error.TelegramError) as e2:
             logger.error(f"CMS Critical Fallback Error: {e2}")
+
+
+def _parse_item_id(callback_data: str, prefix: str) -> int | None:
+    if callback_data.startswith(prefix):
+        val = callback_data.replace(prefix, "")
+        try:
+            return int(val)
+        except (ValueError, TypeError):
+            return None
+    return None
+
+
+@auth_guard(staff_only=True)
+async def return_to_view(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data.pop("info_edit_mode", None)
+    context.user_data.pop("cms_page_id", None)
+    context.user_data.pop("cms_parent_id", None)
+    await show_info_menu(update, context)
+
+
+@auth_guard(staff_only=True)
+async def toggle_edit_mode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    current = bool(context.user_data.get("info_edit_mode"))
+    context.user_data["info_edit_mode"] = not current
+    await show_info_menu(update, context)
+
+
+@auth_guard(staff_only=True)
+async def show_item_options(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_user is None:
+        return
+    query = update.callback_query
+    if query:
+        try:
+            await query.answer()
+        except (ValueError, KeyError, telegram.error.TelegramError):
+            pass
+
+    item_id = _parse_item_id(query.data, CB_CMS_ITEM_OPTS) if query else None
+    if item_id is None:
+        await show_info_menu(update, context)
+        return
+
+    info_service: InfoService = context.bot_data["info_service"]
+    page = await info_service.get_page(item_id)
+    if not page:
+        await show_info_menu(update, context)
+        return
+
+    parent_id = page.get("parent_id")
+    children = await info_service.get_children(parent_id)
+
+    lines = []
+    for child in children:
+        if child["id"] == item_id:
+            lines.append(f"👉 <b>{child['title']}</b>")
+        else:
+            lines.append(f"   {child['title']}")
+
+    text = (
+        f"⚙️ Настройка пункта: <b>{page['title']}</b>\n\n"
+        f"📋 <b>Текущий порядок:</b>\n"
+        + "\n".join(lines)
+        + "\n\nИспользуйте стрелки, чтобы переместить пункт:"
+    )
+
+    reply_markup = get_cms_item_options_keyboard(item_id, parent_id)
+
+    try:
+        await query.edit_message_text(
+            text, reply_markup=reply_markup, parse_mode=ParseMode.HTML
+        )
+    except (ValueError, KeyError, telegram.error.TelegramError):
+        pass
+
+
+@auth_guard(staff_only=True)
+async def move_item(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_user is None:
+        return
+    query = update.callback_query
+    if query:
+        try:
+            await query.answer()
+        except (ValueError, KeyError, telegram.error.TelegramError):
+            pass
+
+    callback_data = query.data if query else ""
+    item_id = None
+    direction = None
+    if CB_CMS_MOVE_UP in callback_data:
+        item_id = _parse_item_id(callback_data, CB_CMS_MOVE_UP)
+        direction = "up"
+    elif CB_CMS_MOVE_DOWN in callback_data:
+        item_id = _parse_item_id(callback_data, CB_CMS_MOVE_DOWN)
+        direction = "down"
+
+    if item_id is None or direction is None:
+        return
+
+    info_service: InfoService = context.bot_data["info_service"]
+    await info_service.move_page(item_id, direction)
+    await show_item_options(update, context)

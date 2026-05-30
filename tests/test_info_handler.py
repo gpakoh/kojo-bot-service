@@ -1,11 +1,18 @@
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from telegram import Update
 from telegram.ext import CallbackQueryHandler, ContextTypes
 
-from tg_bot.handlers.info import show_info_menu
-from tg_bot.keyboards import CB_INFO_MENU, CB_PREFIX_INFO_GO
+from tg_bot.handlers.info import show_info_menu, toggle_edit_mode, show_item_options, move_item
+from tg_bot.keyboards import (
+    CB_INFO_MENU,
+    CB_PREFIX_INFO_GO,
+    CB_CMS_MODE_TOGGLE,
+    CB_CMS_ITEM_OPTS,
+    CB_CMS_MOVE_UP,
+    CB_CMS_MOVE_DOWN,
+)
 import telegram
 
 
@@ -113,3 +120,99 @@ class TestShowInfoMenu:
         handler = CallbackQueryHandler(show_info_menu, pattern=f"^{CB_INFO_MENU}$|^{CB_PREFIX_INFO_GO}")
         assert handler is not None
         assert callable(handler.callback)
+
+
+@pytest.fixture
+def staff_context(mock_context: MagicMock) -> MagicMock:
+    container = MagicMock()
+    user_svc = MagicMock()
+    user_svc.get_user = AsyncMock(return_value=MagicMock(status="approved"))
+    user_svc.has_staff_privileges = MagicMock(return_value=True)
+    container.get.return_value = user_svc
+    mock_context.di = container
+    mock_context.bot_data["admin_ids"] = [1, 2]
+    return mock_context
+
+
+class TestToggleEditMode:
+    @pytest.mark.asyncio
+    async def test_flips_info_edit_mode(self, mock_update: MagicMock, staff_context: MagicMock) -> None:
+        info_service = staff_context.bot_data["info_service"]
+        info_service.get_page.return_value = None
+        info_service.get_children.return_value = []
+
+        await toggle_edit_mode(mock_update, staff_context)
+
+        assert staff_context.user_data.get("info_edit_mode") is True
+
+    @pytest.mark.asyncio
+    async def test_toggles_back_to_false(self, mock_update: MagicMock, staff_context: MagicMock) -> None:
+        info_service = staff_context.bot_data["info_service"]
+        info_service.get_page.return_value = None
+        info_service.get_children.return_value = []
+        staff_context.user_data["info_edit_mode"] = True
+
+        await toggle_edit_mode(mock_update, staff_context)
+
+        assert staff_context.user_data.get("info_edit_mode") is False
+
+
+class TestShowItemOptions:
+    @pytest.mark.asyncio
+    async def test_renders_options_for_a_page(self, mock_update: MagicMock, staff_context: MagicMock) -> None:
+        info_service = staff_context.bot_data["info_service"]
+        mock_update.callback_query.data = f"{CB_CMS_ITEM_OPTS}1"
+        mock_update.callback_query.message.photo = None
+
+        info_service.get_page.return_value = {
+            "id": 1, "title": "Контакты", "body_text": "Мы тут",
+            "image_id": None, "parent_id": None,
+        }
+        info_service.get_children.return_value = [
+            {"id": 1, "title": "Контакты", "body_text": "Мы тут", "image_id": None, "parent_id": None, "sort_order": 0},
+        ]
+
+        await show_item_options(mock_update, staff_context)
+
+        mock_update.callback_query.edit_message_text.assert_called_once()
+        text = mock_update.callback_query.edit_message_text.call_args[0][0]
+        assert "Контакты" in text
+
+    @pytest.mark.asyncio
+    async def test_returns_to_menu_when_page_deleted(self, mock_update: MagicMock, staff_context: MagicMock) -> None:
+        info_service = staff_context.bot_data["info_service"]
+        mock_update.callback_query.data = f"{CB_CMS_ITEM_OPTS}99"
+
+        info_service.get_page.return_value = None
+        info_service.get_children.return_value = []
+
+        await show_item_options(mock_update, staff_context)
+
+
+class TestMoveItem:
+    @pytest.mark.asyncio
+    async def test_moves_page_up(self, mock_update: MagicMock, staff_context: MagicMock) -> None:
+        info_service = staff_context.bot_data["info_service"]
+        mock_update.callback_query.data = f"{CB_CMS_MOVE_UP}1"
+        mock_update.callback_query.message.photo = None
+
+        info_service.get_page.return_value = {
+            "id": 1, "title": "Контакты", "body_text": "Мы тут",
+            "image_id": None, "parent_id": None,
+        }
+        info_service.get_children.return_value = []
+
+        await move_item(mock_update, staff_context)
+
+        info_service.move_page.assert_called_with(1, "up")
+
+
+class TestCMSRegistration:
+    @pytest.mark.asyncio
+    async def test_cms_handlers_registerable(self) -> None:
+        toggle_handler = CallbackQueryHandler(toggle_edit_mode, pattern=f"^{CB_CMS_MODE_TOGGLE}$")
+        options_handler = CallbackQueryHandler(show_item_options, pattern=f"^{CB_CMS_ITEM_OPTS}")
+        move_handler = CallbackQueryHandler(move_item, pattern=f"^{CB_CMS_MOVE_UP}|^{CB_CMS_MOVE_DOWN}")
+        for handler in (toggle_handler, options_handler, move_handler):
+            assert isinstance(handler, CallbackQueryHandler)
+            assert callable(handler.callback)
