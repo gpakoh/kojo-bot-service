@@ -400,7 +400,7 @@ async def post_init(app: Application) -> Any:
     # Синхронизация и рассылка
 
     # 3. синхронизация продуктов (загрузка из файлов в бд)
-    await sync_service.sync_products(pool)
+    await sync_service.sync_products(pool, tenant_id=bot_id)
     logger.info("🔄 синхронизация продуктов завершена.")
 
     # 4. запуск проверки: появились ли товары, которые ждали люди?

@@ -512,6 +512,7 @@ class TestSyncProductsButtonAction:
     @pytest.mark.asyncio
     async def test_sync_success(self, admin_update, admin_context):
         admin_context.bot_data["db_pool"] = MagicMock()
+        admin_context.bot_data["bot_id_for_quart"] = "test_tenant"
 
         with patch(
             "tg_bot.handlers.admin_panel.sync_service.sync_products",
