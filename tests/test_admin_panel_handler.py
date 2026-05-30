@@ -7,6 +7,7 @@ from telegram import CallbackQuery, Message, Update
 from tg_bot.domain.order import OrderStatus as DomainOrderStatus
 from tg_bot.handlers.admin_panel import (
     admin_exit_to_main_menu,
+    handle_order_action,
     handle_user_action,
     panel_start,
     show_communication_center,
@@ -617,3 +618,65 @@ class TestShowProxyMgmt:
         admin_update.callback_query.edit_message_text.assert_awaited_once()
         text = admin_update.callback_query.edit_message_text.call_args[0][0]
         assert "proxy" in text.lower()
+
+
+class TestHandleOrderAction:
+    @pytest.mark.asyncio
+    async def test_notifies_user_on_status_change(self, admin_update, admin_context):
+        admin_update.callback_query.data = "admin_order_action_set_paid_44"
+        admin_update.effective_chat = MagicMock()
+
+        mock_order = MagicMock()
+        mock_order.user_id = 999
+        admin_context.bot_data["order_service"].get_full_order_details = AsyncMock(
+            return_value=(mock_order, [])
+        )
+        admin_context.bot_data["order_service"].update_order_status = AsyncMock(
+            return_value=mock_order
+        )
+        with patch(
+            "tg_bot.handlers.admin_panel.notify_user_order_status_changed",
+            new_callable=AsyncMock,
+        ) as mock_notify:
+            await handle_order_action(admin_update, admin_context)
+
+            mock_notify.assert_awaited_once_with(
+                context=admin_context,
+                user_id=999,
+                order_id=44,
+                new_status="Оплачен",
+            )
+
+    @pytest.mark.asyncio
+    async def test_order_not_found_skips_notification(self, admin_update, admin_context):
+        admin_update.callback_query.data = "admin_order_action_set_paid_44"
+        admin_context.bot_data["order_service"].get_full_order_details = AsyncMock(
+            return_value=None
+        )
+        with patch(
+            "tg_bot.handlers.admin_panel.notify_user_order_status_changed",
+            new_callable=AsyncMock,
+        ) as mock_notify:
+            await handle_order_action(admin_update, admin_context)
+
+            mock_notify.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_update_failure_skips_notification(self, admin_update, admin_context):
+        admin_update.callback_query.data = "admin_order_action_set_paid_44"
+        admin_update.effective_chat = MagicMock()
+
+        mock_order = MagicMock()
+        admin_context.bot_data["order_service"].get_full_order_details = AsyncMock(
+            return_value=(mock_order, [])
+        )
+        admin_context.bot_data["order_service"].update_order_status = AsyncMock(
+            return_value=None
+        )
+        with patch(
+            "tg_bot.handlers.admin_panel.notify_user_order_status_changed",
+            new_callable=AsyncMock,
+        ) as mock_notify:
+            await handle_order_action(admin_update, admin_context)
+
+            mock_notify.assert_not_called()

@@ -17,6 +17,7 @@ from tg_bot.bot_services.settings_service import SettingsService
 from tg_bot.bot_services.user_address_service import UserAddressService
 from tg_bot.bot_services.user_service import UserService
 from tg_bot.handlers.common import cleanup_previous_menu
+from tg_bot.handlers.order_notifications import notify_user_order_status_changed
 from tg_bot.keyboards import (
     CB_PREFIX_ORDER_DETAILS,
     get_delivery_method_keyboard,
@@ -346,8 +347,14 @@ async def finalize_order_and_pay(
     app_config = get_app_config(context)
     flags = FeatureFlags(config=app_config)
     if await flags.is_enabled("auto_approve_orders"):
-        from tg_bot.domain.order import OrderStatus
-        await order_service.update_order_status(order.id, OrderStatus.AWAITING_PAYMENT)
+        from tg_bot.domain.order import OrderStatus as DomainOrderStatus
+        await order_service.update_order_status(order.id, DomainOrderStatus.AWAITING_PAYMENT)
+        await notify_user_order_status_changed(
+            context=context,
+            user_id=user_id,
+            order_id=order.id,
+            new_status=DomainOrderStatus.AWAITING_PAYMENT.value,
+        )
         logger.info("Auto-approve: order %s set to AWAITING_PAYMENT", order.id)
 
     return order_created_state
