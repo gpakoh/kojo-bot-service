@@ -1,4 +1,5 @@
 import html
+import logging
 from typing import Any, Optional
 
 import telegram
@@ -14,28 +15,25 @@ from telegram.ext import (
 )
 
 from tg_bot.bot_services.info_service import InfoService
+from tg_bot.decorators import auth_guard
+from tg_bot.handlers.common import cleanup_previous_menu
 from tg_bot.keyboards import (
-    CB_EDIT_CONTENT,
-    CB_EDIT_ORDER,
-    CB_EDIT_TITLE,
-    CB_CMS_MODE_TOGGLE,
     CB_CMS_ITEM_OPTS,
     CB_CMS_MOVE_DOWN,
     CB_CMS_MOVE_UP,
     CB_CMS_RENAME,
+    CB_EDIT_CONTENT,
+    CB_EDIT_ORDER,
+    CB_EDIT_TITLE,
     CB_INFO_MENU,
     CB_PREFIX_INFO_ADD,
     CB_PREFIX_INFO_DEL,
     CB_PREFIX_INFO_EDIT,
     CB_PREFIX_INFO_GO,
-    CB_USER_SHOW_MAIN_MENU,
     get_cms_item_options_keyboard,
     get_cms_keyboard,
 )
-from tg_bot.decorators import auth_guard
-from tg_bot.handlers.common import cleanup_previous_menu
 
-import logging
 logger = logging.getLogger(__name__)
 
 AWAITING_TITLE, AWAITING_RENAME, AWAITING_ORDER, AWAITING_CONTENT = range(4)

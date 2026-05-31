@@ -34,9 +34,20 @@ class InfoService:
     async def get_children(self, parent_id: Optional[int]) -> List[Dict[str, Any]]:
         async with self._connection() as conn:
             if parent_id is None:
-                return cast(list[dict[str, Any]], await conn.fetch("SELECT * FROM info_pages WHERE parent_id IS NULL ORDER BY sort_order, title"))
+                return cast(
+                    list[dict[str, Any]],
+                    await conn.fetch(
+                        "SELECT * FROM info_pages WHERE parent_id IS NULL ORDER BY sort_order, title"
+                    ),
+                )
             else:
-                return cast(list[dict[str, Any]], await conn.fetch("SELECT * FROM info_pages WHERE parent_id = $1 ORDER BY sort_order, title", parent_id))
+                return cast(
+                    list[dict[str, Any]],
+                    await conn.fetch(
+                        "SELECT * FROM info_pages WHERE parent_id = $1 ORDER BY sort_order, title",
+                        parent_id,
+                    ),
+                )
 
     async def create_page(
         self, parent_id: Optional[int], title: str,

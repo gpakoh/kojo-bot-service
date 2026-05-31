@@ -21,7 +21,6 @@ from telegram.ext import (
     CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
-    ConversationHandler,
     InlineQueryHandler,
     MessageHandler,
     PersistenceInput,
@@ -89,7 +88,6 @@ from tg_bot.bot_services.settings_service import SettingsService
 from tg_bot.bot_services.user_address_service import UserAddressService
 from tg_bot.bot_services.user_service import UserService
 from tg_bot.decorators import auth_guard
-from tg_bot.infrastructure.database import DatabaseManager
 from tg_bot.handlers.admin_panel import (
     admin_courier_handler,
     admin_logo_handler,
@@ -113,15 +111,7 @@ from tg_bot.handlers.ai_chat import (
     start_ai_chat,
 )
 from tg_bot.handlers.common import cleanup_previous_menu, handle_stale_callback
-from tg_bot.handlers.info import show_info_menu, toggle_edit_mode, show_item_options, move_item, info_cms_conversation
-from tg_bot.keyboards import (
-    CB_CMS_ITEM_OPTS,
-    CB_CMS_MODE_TOGGLE,
-    CB_CMS_MOVE_DOWN,
-    CB_CMS_MOVE_UP,
-    CB_INFO_MENU,
-    CB_PREFIX_INFO_GO,
-)
+from tg_bot.handlers.info import info_cms_conversation, move_item, show_info_menu, show_item_options, toggle_edit_mode
 from tg_bot.handlers.order import order_handler
 from tg_bot.handlers.registration import (
     handle_approval_callback,
@@ -156,6 +146,7 @@ from tg_bot.handlers.user_panel import (
     start_order_rating,
     user_support_handler,
 )
+from tg_bot.infrastructure.database import DatabaseManager
 from tg_bot.keyboards import (
     CB_ADMIN_BACK_TO_STAFF_MENU,
     CB_ADMIN_COMMUNICATION_CENTER,
@@ -165,11 +156,17 @@ from tg_bot.keyboards import (
     CB_AI_HIST_PAGE,
     CB_BACK_TO_ADDR_LIST,
     CB_CLOSE_GENERIC,
+    CB_CMS_ITEM_OPTS,
+    CB_CMS_MODE_TOGGLE,
+    CB_CMS_MOVE_DOWN,
+    CB_CMS_MOVE_UP,
+    CB_INFO_MENU,
     CB_PREFIX_ADDR_DEF,
     CB_PREFIX_ADDR_DEL,
     CB_PREFIX_ADDR_VIEW,
     CB_PREFIX_APPROVE,
     CB_PREFIX_DECLINE,
+    CB_PREFIX_INFO_GO,
     CB_PREFIX_ORDER_ACTION,
     CB_PREFIX_ORDER_DETAILS,
     CB_PREFIX_ORDERS_BY_STATUS,
