@@ -1346,7 +1346,8 @@ async def sync_products_button_action(update: Update, context: ContextTypes.DEFA
         notif_service: NotificationService = context.bot_data.get('notification_service')  # type: ignore[assignment]
 
         # 1. синхронизация файлов и бд
-        await sync_service.sync_products(pool)
+        tenant_id = context.bot_data.get("bot_id_for_quart", "")
+        await sync_service.sync_products(pool, tenant_id=tenant_id)
 
         # 2. рассылка уведомлений
         if notif_service:

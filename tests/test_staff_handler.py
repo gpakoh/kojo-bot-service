@@ -146,6 +146,7 @@ class TestTriggerManualSync:
     async def test_calls_sync_products(self, mock_update, mock_context):
         _staff_auth_setup(mock_context)
         mock_context.bot_data["db_pool"] = MagicMock()
+        mock_context.bot_data["bot_id_for_quart"] = "test_tenant"
         mock_context.bot_data["notification_service"] = MagicMock()
         mock_context.bot_data["notification_service"].process_restock_notifications = (
             AsyncMock()
@@ -161,12 +162,15 @@ class TestTriggerManualSync:
             "tg_bot.handlers.staff.sync_service.sync_products", new_callable=AsyncMock
         ) as mock_sync:
             await trigger_manual_sync(mock_update, mock_context)
-            mock_sync.assert_awaited_once_with(mock_context.bot_data["db_pool"])
+            mock_sync.assert_awaited_once_with(
+                mock_context.bot_data["db_pool"], tenant_id="test_tenant"
+            )
 
     @pytest.mark.asyncio
     async def test_handles_no_notification_service(self, mock_update, mock_context):
         _staff_auth_setup(mock_context)
         mock_context.bot_data["db_pool"] = MagicMock()
+        mock_context.bot_data["bot_id_for_quart"] = "test_tenant"
         mock_context.bot_data["notification_service"] = None
         mock_update.message = MagicMock()
         mock_update.message.reply_text = AsyncMock()
@@ -179,7 +183,9 @@ class TestTriggerManualSync:
             "tg_bot.handlers.staff.sync_service.sync_products", new_callable=AsyncMock
         ) as mock_sync:
             await trigger_manual_sync(mock_update, mock_context)
-            mock_sync.assert_awaited_once()
+            mock_sync.assert_awaited_once_with(
+                mock_context.bot_data["db_pool"], tenant_id="test_tenant"
+            )
             status_msg.edit_text.assert_any_call(
                 "⚠️ Каталог обновлен, но сервис уведомлений не найден. Рассылка пропущена.",
                 parse_mode="HTML",

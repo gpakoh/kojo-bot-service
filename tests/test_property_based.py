@@ -169,7 +169,7 @@ class TestProductSyncProperties:
 
     @given(
         st.from_regex(
-            r"^(name: [\w\s]+\nprice: \d+ гр \d+ руб|name: [\w\s]+\nprice: \d+)$",
+            r"^(name: [\w ]+\nprice: \d+ гр \d+ руб|name: [\w ]+\nprice: \d+)$",
             fullmatch=True,
         )
     )

@@ -28,6 +28,10 @@ class EventStore:
     """
     PostgreSQL-based event store for order event sourcing.
 
+    # WARNING: EventStore uses raw pool.acquire() — no tenant context.
+    # This is a system-level RLS bypass. Do not propagate data from here
+    # into per-tenant tables without setting app.current_tenant first.
+
     Schema:
         CREATE TABLE event_store (
             id BIGSERIAL PRIMARY KEY,

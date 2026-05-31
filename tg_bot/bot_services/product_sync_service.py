@@ -65,7 +65,7 @@ def parse_product_file(file_path: Path) -> dict[str, Any]:
     return data
 
 
-async def _handle_force_recache(pool: asyncpg.Pool) -> tuple[bool, bool]:
+async def _handle_force_recache(pool: asyncpg.Pool, tenant_id: str = "") -> tuple[bool, bool]:
     """
     Железобетонный механизм проверки флагов через очередь (Lock).
     Ни одна функция не войдет, пока предыдущая не отпустит замок.
@@ -93,6 +93,8 @@ async def _handle_force_recache(pool: asyncpg.Pool) -> tuple[bool, bool]:
                 if force_db is True:
                     logger.warning("🚀 [action] выполняем очистку бд...")
                     async with pool.acquire() as conn:
+                        if tenant_id:
+                            await conn.execute("SELECT set_tenant_context($1)", tenant_id)
                         await conn.execute("TRUNCATE TABLE products, product_variants, sync_metadata RESTART IDENTITY CASCADE;")
                     db_recache = True
                     config_data["force_recache_product"] = False
@@ -249,7 +251,7 @@ async def _get_variant_from_llm(name: str, task_type: str) -> str:
 
     return ""
 
-async def _process_single_product_directory(conn: asyncpg.Connection, product_dir: Path, search_recache: bool = False) -> str:
+async def _process_single_product_directory(conn: asyncpg.Connection, product_dir: Path, search_recache: bool = False, tenant_id: str = "") -> str:
     """Обрабатывает папку товара: парсит, обогащает поиск, пишет в БД."""
     file_path = product_dir / "product.txt"
     parsed_data = parse_product_file(file_path)
@@ -330,12 +332,13 @@ async def _process_single_product_directory(conn: asyncpg.Connection, product_di
     # Используем search_variants колонку (нужно добавить в бд: alter table products add column search_variants text)
     product_id = await conn.fetchval(
         """
-        INSERT INTO products (name, short_description, full_description, chapters, images, is_available, search_variants)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        ON CONFLICT (name) DO UPDATE SET
-        short_description = $2, full_description = $3, chapters = $4, images = $5, is_available = $6, search_variants = $7
+        INSERT INTO products (tenant_id, name, short_description, full_description, chapters, images, is_available, search_variants)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (tenant_id, name) DO UPDATE SET
+        short_description = $3, full_description = $4, chapters = $5, images = $6, is_available = $7, search_variants = $8
         RETURNING id;
         """,
+        tenant_id,
         product_name, parsed_data.get('short_description', ''), parsed_data.get('full_description', ''),
         [c.strip() for c in parsed_data.get('chapters', '').split(',')] if parsed_data.get('chapters') else [],
         images, parsed_data.get('sale', 'False').lower() == 'true',
@@ -368,16 +371,16 @@ def _write_rag_file(rag_content_parts: List[str]) -> Any:
 
 # NOTE:
 # Product sync is a system-level catalog operation.
-# It intentionally uses the raw pool instead of tenant-scoped connections because
-# it refreshes global product tables during startup/admin sync and may run outside
-# Telegram tenant middleware. Do not wrap this path in tenant_connection() unless
-# product sync is redesigned to be tenant-explicit.
-async def sync_products(pool: asyncpg.Pool) -> Any:
+# It intentionally uses the raw pool instead of tenant-scoped connections, but
+# now accepts an explicit tenant_id and sets tenant context on each connection
+# so the function is safe with non-bypass pools. Do not remove the set_tenant_context
+# calls unless the pool uses BYPASSRLS exclusively.
+async def sync_products(pool: asyncpg.Pool, tenant_id: str = "") -> Any:
     """Главная функция-оркестратор синхронизации."""
     logger.info("--- запуск синхронизации каталога продуктов ---")
 
     # Флаги сбрасываются прямо внутри этой функции
-    db_recache, search_recache = await _handle_force_recache(pool)
+    db_recache, search_recache = await _handle_force_recache(pool, tenant_id)
 
     if not PRODUCTS_DIR.is_dir():
         logger.warning(f"Директория продуктов '{PRODUCTS_DIR}' не найдена.")
@@ -410,7 +413,9 @@ async def sync_products(pool: asyncpg.Pool) -> Any:
         logger.info(f"🔄 '{product_dir.name}': начало обработки (ForceSearch={search_recache})")
         try:
             async with pool.acquire() as conn:
-                rag_part = await _process_single_product_directory(conn, product_dir, search_recache)
+                if tenant_id:
+                    await conn.execute("SELECT set_tenant_context($1)", tenant_id)
+                rag_part = await _process_single_product_directory(conn, product_dir, search_recache, tenant_id=tenant_id)
                 rag_content_parts.append(rag_part)
 
                 await conn.execute(
