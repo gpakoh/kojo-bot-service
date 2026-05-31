@@ -408,7 +408,29 @@ async def post_init(app: Application) -> Any:
     app.bot_data['quart_url'] = quart_url
     app.bot_data['bot_id_for_quart'] = bot_id
     app.bot_data['integration_url'] = integration_url
+
+    # Configure tenant runtime
+    configure_tenant_runtime(app, bot_id=bot_id)
     logger.info("✅ приложение инициализировано и готово к работе.")
+
+
+def configure_tenant_runtime(
+    application: Application,
+    *,
+    bot_id: str | None = None,
+) -> None:
+    """Wire multi-tenant runtime into the PTB Application.
+
+    Creates TenantRegistry (singleton) and stores it in bot_data.
+    Sets fallback ``_tenant_bot_id`` for single-tenant compatibility.
+
+    Safe when ``WARMUP_BOT_IDS`` is not set — operates in single-tenant mode.
+    """
+    from tg_bot.tenant.config import get_tenant_registry
+
+    tenant_registry = get_tenant_registry()
+    application.bot_data['tenant_registry'] = tenant_registry
+    application.bot_data['_tenant_bot_id'] = bot_id or os.environ.get("BOT_ID_FOR_QUART") or "default"
 
 
 async def handle_unregistered_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Any:
@@ -795,8 +817,10 @@ async def main() -> None:
     # Middleware Support Via Process_update Wrapping (PTB 20.x Lacks Add_middleware)
     from tg_bot.infrastructure.observability_middleware import ObservabilityMiddleware
     from tg_bot.rate_limit_middleware import app_middleware
+    from tg_bot.tenant.middleware import TenantMiddleware
 
     _orig_process_update = application.process_update
+    _tenant_middleware = TenantMiddleware()
 
     async def _run_middleware_chain(update: Update) -> None:
         ctx = application.context_types.context.from_update(update, application)
@@ -808,7 +832,10 @@ async def main() -> None:
         async def _rate_limit(_update: object, _context: object) -> None:
             await app_middleware(update, ctx, _dispatch)
 
-        await ObservabilityMiddleware()(update, ctx, _rate_limit)
+        async def _observability(_update: object, _context: object) -> None:
+            await ObservabilityMiddleware()(update, ctx, _rate_limit)
+
+        await _tenant_middleware(update, ctx, _observability)
 
     application.process_update = _run_middleware_chain  # type: ignore[method-assign,assignment]
 

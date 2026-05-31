@@ -20,6 +20,12 @@ Configuration via environment:
 """
 from typing import Any, Optional
 
+from tg_bot.tenant.bootstrap import (
+    BootstrapPlan,
+    BootstrapStep,
+    StepResult,
+    TenantBootstrapService,
+)
 from tg_bot.tenant.config import (
     TenantConfig,
     TenantRegistry,
@@ -56,4 +62,9 @@ __all__ = [
     # Migrations
     'TenantMigrationManager',
     'get_migration_manager',
+    # Bootstrap
+    'BootstrapStep',
+    'BootstrapPlan',
+    'StepResult',
+    'TenantBootstrapService',
 ]
