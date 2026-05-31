@@ -70,18 +70,7 @@ class TestNoRawEnvironForSecrets:
         assert not violations, f"Possible secrets via raw os.environ in handlers: {violations}"
 
 
-class TestNoTodoInEventHandlers:
-    def test_no_todo_in_order_event_handler(self) -> Any:
-        """Verify TODO/FIXME removed from order_event_handler.py."""
-        path = Path("tg_bot/application/event_handlers/order_event_handler.py")
-        content = path.read_text()
-        lines = content.split('\n')
-        violations = [
-            f"{path}:{i+1}" for i, line in enumerate(lines)
-            if 'TODO' in line or 'FIXME' in line
-        ]
-        assert not violations, f"TODO/FIXME found: {violations}"
-
+class TestNoTodoInAdminPanel:
     def test_no_todo_in_admin_panel(self) -> Any:
         """Verify TODO/FIXME removed from admin_panel.py handlers."""
         path = Path("tg_bot/handlers/admin_panel.py")

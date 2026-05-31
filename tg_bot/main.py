@@ -252,7 +252,6 @@ async def post_init(app: Application) -> Any:
     # --- End Metrics & Health ---
 
     # --- Infrastructure: Event Store, Redis, Idempotency, DLQ ---
-    from tg_bot.application.event_handlers.order_event_handler import OrderEventHandler
     from tg_bot.infrastructure.dlq import DeadLetterQueue
     from tg_bot.infrastructure.event_store import EventStore
     from tg_bot.infrastructure.idempotency import IdempotencyStore
@@ -279,12 +278,9 @@ async def post_init(app: Application) -> Any:
 
     idempotency_store = IdempotencyStore(redis_client) if redis_client else None
     dlq = DeadLetterQueue(redis_client=redis_client)
-    order_event_handler = OrderEventHandler(dlq=dlq)
 
-    dlq.set_handler(lambda item: order_event_handler.handle_event_from_dlq(item))
     app.bot_data['idempotency_store'] = idempotency_store
     app.bot_data['dlq'] = dlq
-    app.bot_data['order_event_handler'] = order_event_handler
 
     if redis_client:
         health.register("redis", lambda: redis_client.ping())
