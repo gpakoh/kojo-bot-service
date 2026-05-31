@@ -1,8 +1,8 @@
 # Tg_bot/bot_services/product_service.py
 import logging
 import re
-from datetime import datetime
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Any, AsyncIterator, Dict, List, Optional, TypedDict
 
 import asyncpg

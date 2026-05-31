@@ -5,8 +5,8 @@ from typing import Any, AsyncIterator, List, Optional, cast
 
 import asyncpg
 
-from tg_bot.tenant.config import get_current_tenant
 from tg_bot.models import CommunicationThread, SenderRole, ThreadMessage
+from tg_bot.tenant.config import get_current_tenant
 
 logger = logging.getLogger(__name__)
 

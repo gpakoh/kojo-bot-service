@@ -20,7 +20,6 @@ from tg_bot.handlers.common import cleanup_previous_menu
 from tg_bot.handlers.order_admin_notifications import notify_admins_about_cancelled_order
 from tg_bot.handlers.order_notifications import notify_user_order_status_changed
 from tg_bot.keyboards import (
-    CB_PREFIX_ORDER_DETAILS,
     get_delivery_method_keyboard,
     get_webapp_keyboard,
 )
@@ -218,7 +217,7 @@ async def _notify_admins_about_new_order(
     if order.delivery_address:
         text += f"\n<b>Адрес:</b> {order.delivery_address[:100]}"
     if items_lines:
-        text += f"\n\n<b>Состав:</b>\n" + "\n".join(items_lines)
+        text += "\n\n<b>Состав:</b>\n" + "\n".join(items_lines)
 
     from tg_bot.keyboards import get_admin_order_keyboard
     markup = get_admin_order_keyboard(order.id)
