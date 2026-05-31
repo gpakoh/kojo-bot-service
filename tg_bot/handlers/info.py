@@ -51,6 +51,8 @@ async def _check_is_staff(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> b
 
 
 def _resolve_navigation(query: Any, context: ContextTypes.DEFAULT_TYPE) -> Optional[int]:
+    if context.user_data is None:
+        return None
     page_id = None
     is_explicit = False
 
@@ -90,7 +92,12 @@ async def _render_page_content(
     if update.effective_chat is None:
         return
 
+    if context.user_data is None:
+        return
+
     query = update.callback_query
+    if query is None:
+        return
     has_old_photo = bool(query and query.message and query.message.photo)
     is_long_text = len(text) > 1000
     user_id = update.effective_user.id
@@ -244,6 +251,8 @@ async def show_info_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if context.user_data is None:
         context.user_data = {}
+    if update.effective_chat is None:
+        return
 
     page_id = _resolve_navigation(query, context)
 
@@ -314,6 +323,8 @@ def _parse_item_id(callback_data: str, prefix: str) -> int | None:
 
 @auth_guard(staff_only=True)
 async def return_to_view(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if context.user_data is None:
+        return
     context.user_data.pop("info_edit_mode", None)
     context.user_data.pop("cms_page_id", None)
     context.user_data.pop("cms_parent_id", None)
@@ -322,6 +333,8 @@ async def return_to_view(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 @auth_guard(staff_only=True)
 async def toggle_edit_mode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if context.user_data is None:
+        return
     current = bool(context.user_data.get("info_edit_mode"))
     context.user_data["info_edit_mode"] = not current
     await show_info_menu(update, context)
@@ -329,16 +342,18 @@ async def toggle_edit_mode(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 @auth_guard(staff_only=True)
 async def show_item_options(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.effective_user is None:
-        return
     query = update.callback_query
-    if query:
-        try:
-            await query.answer()
-        except (ValueError, KeyError, telegram.error.TelegramError):
-            pass
+    if query is None:
+        return
+    try:
+        await query.answer()
+    except (ValueError, KeyError, telegram.error.TelegramError):
+        pass
 
-    item_id = _parse_item_id(query.data, CB_CMS_ITEM_OPTS) if query else None
+    if query.data is None:
+        await show_info_menu(update, context)
+        return
+    item_id = _parse_item_id(query.data, CB_CMS_ITEM_OPTS)
     if item_id is None:
         await show_info_menu(update, context)
         return
@@ -378,16 +393,15 @@ async def show_item_options(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 @auth_guard(staff_only=True)
 async def move_item(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.effective_user is None:
-        return
     query = update.callback_query
-    if query:
-        try:
-            await query.answer()
-        except (ValueError, KeyError, telegram.error.TelegramError):
-            pass
+    if query is None or query.data is None:
+        return
+    try:
+        await query.answer()
+    except (ValueError, KeyError, telegram.error.TelegramError):
+        pass
 
-    callback_data = query.data if query else ""
+    callback_data = query.data
     item_id = None
     direction = None
     if CB_CMS_MOVE_UP in callback_data:
@@ -407,16 +421,15 @@ async def move_item(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 @auth_guard(staff_only=True)
 async def delete_page_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.effective_user is None:
-        return ConversationHandler.END
     query = update.callback_query
-    if query:
-        try:
-            await query.answer()
-        except (ValueError, KeyError, telegram.error.TelegramError):
-            pass
+    if query is None or query.data is None:
+        return ConversationHandler.END
+    try:
+        await query.answer()
+    except (ValueError, KeyError, telegram.error.TelegramError):
+        pass
 
-    page_id = _parse_item_id(query.data, CB_PREFIX_INFO_DEL) if query else None
+    page_id = _parse_item_id(query.data, CB_PREFIX_INFO_DEL)
     if page_id is None:
         await show_info_menu(update, context)
         return ConversationHandler.END
@@ -430,20 +443,21 @@ async def delete_page_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 @auth_guard(staff_only=True)
 async def start_edit_page(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.effective_user is None:
-        return ConversationHandler.END
     query = update.callback_query
-    if query:
-        try:
-            await query.answer()
-        except (ValueError, KeyError, telegram.error.TelegramError):
-            pass
+    if query is None or query.data is None:
+        return ConversationHandler.END
+    try:
+        await query.answer()
+    except (ValueError, KeyError, telegram.error.TelegramError):
+        pass
 
-    page_id = _parse_item_id(query.data, CB_PREFIX_INFO_EDIT) if query else None
+    page_id = _parse_item_id(query.data, CB_PREFIX_INFO_EDIT)
     if page_id is None:
         await show_info_menu(update, context)
         return ConversationHandler.END
 
+    if context.user_data is None:
+        return ConversationHandler.END
     context.user_data["cms_page_id"] = page_id
 
     info_service: InfoService = context.bot_data["info_service"]
@@ -474,8 +488,9 @@ async def start_edit_page(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 @auth_guard(staff_only=True)
 async def ask_edit_title(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.effective_user is None:
+    if context.user_data is None:
         return ConversationHandler.END
+
     query = update.callback_query
     if query:
         try:
@@ -485,7 +500,7 @@ async def ask_edit_title(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     context.user_data["cms_action"] = "edit_title"
 
-    if query:
+    if query and query.message:
         try:
             await query.message.reply_text(
                 "🅰️ Введите новое название страницы.\n"
@@ -499,21 +514,23 @@ async def ask_edit_title(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 @auth_guard(staff_only=True)
 async def start_quick_rename(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.effective_user is None:
+    if context.user_data is None:
         return ConversationHandler.END
-    query = update.callback_query
-    if query:
-        try:
-            await query.answer()
-        except (ValueError, KeyError, telegram.error.TelegramError):
-            pass
 
-    page_id = _parse_item_id(query.data, CB_CMS_RENAME) if query else None
+    query = update.callback_query
+    if query is None or query.data is None:
+        return ConversationHandler.END
+    try:
+        await query.answer()
+    except (ValueError, KeyError, telegram.error.TelegramError):
+        pass
+
+    page_id = _parse_item_id(query.data, CB_CMS_RENAME)
     if page_id is not None:
         context.user_data["cms_page_id"] = page_id
     context.user_data["cms_action"] = "edit_title"
 
-    if query:
+    if query.message:
         try:
             await query.message.reply_text(
                 "🅰️ Введите новое название страницы.\n"
@@ -527,7 +544,7 @@ async def start_quick_rename(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 @auth_guard(staff_only=True)
 async def ask_edit_content(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.effective_user is None:
+    if context.user_data is None:
         return ConversationHandler.END
     query = update.callback_query
     if query:
@@ -538,14 +555,14 @@ async def ask_edit_content(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     context.user_data["cms_action"] = "edit_content"
 
-    page_id = context.user_data.get("cms_page_id")
+    page_id: Optional[int] = context.user_data.get("cms_page_id")
     if page_id is None:
-        if query:
+        if query and query.message:
             try:
                 await query.message.reply_text("Ошибка: страница не выбрана.")
             except (ValueError, KeyError, telegram.error.TelegramError):
                 pass
-            return ConversationHandler.END
+        return ConversationHandler.END
 
     info_service: InfoService = context.bot_data["info_service"]
     page = await info_service.get_page(page_id)
@@ -554,7 +571,7 @@ async def ask_edit_content(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     safe_content = html.escape(html.unescape(current_content or ""))
     truncated = safe_content[:200] + "…" if len(safe_content) > 200 else safe_content or "пусто"
 
-    if query:
+    if query and query.message:
         try:
             await query.message.reply_text(
                 f"📝 Текущее содержимое:\n<code>{truncated}</code>\n\n"
@@ -570,9 +587,8 @@ async def ask_edit_content(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     return AWAITING_CONTENT
 
 
-@auth_guard(staff_only=True)
 async def ask_edit_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.effective_user is None:
+    if context.user_data is None:
         return ConversationHandler.END
     query = update.callback_query
     if query:
@@ -583,7 +599,7 @@ async def ask_edit_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     context.user_data["cms_action"] = "edit_order"
 
-    if query:
+    if query and query.message:
         try:
             await query.message.reply_text(
                 "🔢 Введите новый порядковый номер (целое число).\n"
@@ -597,13 +613,18 @@ async def ask_edit_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 @auth_guard(staff_only=True)
 async def handle_rename_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    text = update.message.text if update.message else ""
+    if context.user_data is None:
+        return ConversationHandler.END
+    message = update.message
+    if message is None:
+        return ConversationHandler.END
+    text = message.text or ""
     if not text:
-        await update.message.reply_text("Название не может быть пустым. Попробуйте ещё раз:")
+        await message.reply_text("Название не может быть пустым. Попробуйте ещё раз:")
         return AWAITING_RENAME
 
     if len(text) > 100:
-        await update.message.reply_text(
+        await message.reply_text(
             f"❌ Слишком длинное название ({len(text)} симв.). Максимум 100. Попробуйте короче:"
         )
         return AWAITING_RENAME
@@ -612,7 +633,7 @@ async def handle_rename_input(update: Update, context: ContextTypes.DEFAULT_TYPE
     page_id = context.user_data.get("cms_page_id")
 
     if page_id is None:
-        await update.message.reply_text("Ошибка: страница не выбрана.")
+        await message.reply_text("Ошибка: страница не выбрана.")
         return ConversationHandler.END
 
     await info_service.update_page_title(page_id, text)
@@ -620,7 +641,7 @@ async def handle_rename_input(update: Update, context: ContextTypes.DEFAULT_TYPE
     for key in ("cms_action", "cms_page_id"):
         context.user_data.pop(key, None)
 
-    await update.message.reply_text(
+    await message.reply_text(
         "✅ Название обновлено!",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ Вернуться к списку", callback_data=CB_INFO_MENU)]
@@ -632,18 +653,23 @@ async def handle_rename_input(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 @auth_guard(staff_only=True)
 async def handle_order_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    text = update.message.text if update.message else ""
+    if context.user_data is None:
+        return ConversationHandler.END
+    message = update.message
+    if message is None:
+        return ConversationHandler.END
+    text = message.text or ""
     try:
         order = int(text)
     except (ValueError, TypeError):
-        await update.message.reply_text("❌ Введите целое число. Попробуйте ещё раз:")
+        await message.reply_text("❌ Введите целое число. Попробуйте ещё раз:")
         return AWAITING_ORDER
 
     info_service: InfoService = context.bot_data["info_service"]
     page_id = context.user_data.get("cms_page_id")
 
     if page_id is None:
-        await update.message.reply_text("Ошибка: страница не выбрана.")
+        await message.reply_text("Ошибка: страница не выбрана.")
         return ConversationHandler.END
 
     await info_service.update_page_order(page_id, order)
@@ -651,7 +677,7 @@ async def handle_order_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
     for key in ("cms_action", "cms_page_id"):
         context.user_data.pop(key, None)
 
-    await update.message.reply_text(
+    await message.reply_text(
         "✅ Порядок обновлён!",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ Вернуться к списку", callback_data=CB_INFO_MENU)]
@@ -663,6 +689,8 @@ async def handle_order_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 @auth_guard(staff_only=True)
 async def cancel_cms(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if context.user_data is None:
+        return ConversationHandler.END
     for key in ("cms_action", "cms_title", "cms_parent_id", "cms_page_id"):
         context.user_data.pop(key, None)
 
@@ -676,21 +704,22 @@ async def cancel_cms(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 @auth_guard(staff_only=True)
 async def start_add_page(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.effective_user is None:
+    if context.user_data is None:
         return ConversationHandler.END
     query = update.callback_query
-    if query:
-        try:
-            await query.answer()
-        except (ValueError, KeyError, telegram.error.TelegramError):
-            pass
+    if query is None or query.data is None:
+        return ConversationHandler.END
+    try:
+        await query.answer()
+    except (ValueError, KeyError, telegram.error.TelegramError):
+        pass
 
-    data = query.data.replace(CB_PREFIX_INFO_ADD, "") if query else "root"
+    data = query.data.replace(CB_PREFIX_INFO_ADD, "")
     parent_id = int(data) if data != "root" else None
     context.user_data["cms_action"] = "create"
     context.user_data["cms_parent_id"] = parent_id
 
-    if query:
+    if query.message:
         try:
             await query.message.reply_text(
                 "🆕 Введите название новой страницы.\n"
@@ -704,20 +733,25 @@ async def start_add_page(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 @auth_guard(staff_only=True)
 async def handle_title_creation_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    text = update.message.text if update.message else ""
+    if context.user_data is None:
+        return ConversationHandler.END
+    message = update.message
+    if message is None:
+        return ConversationHandler.END
+    text = message.text or ""
     if not text:
-        await update.message.reply_text("Название не может быть пустым. Попробуйте ещё раз:")
+        await message.reply_text("Название не может быть пустым. Попробуйте ещё раз:")
         return AWAITING_TITLE
 
     if len(text) > 100:
-        await update.message.reply_text(
+        await message.reply_text(
             f"❌ Слишком длинное название ({len(text)} симв.). Максимум 100. Попробуйте короче:"
         )
         return AWAITING_TITLE
 
     context.user_data["cms_title"] = text
 
-    await update.message.reply_text(
+    await message.reply_text(
         f"Название: <b>{text}</b>.\n\n"
         "Теперь отправьте содержимое страницы.\n\n"
         "Можно отправить:\n"
@@ -732,10 +766,16 @@ async def handle_title_creation_input(update: Update, context: ContextTypes.DEFA
 
 @auth_guard(staff_only=True)
 async def handle_content_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if context.user_data is None:
+        return ConversationHandler.END
+    message = update.message
+    if message is None:
+        return ConversationHandler.END
+
     action = context.user_data.get("cms_action")
 
     try:
-        await update.message.delete()
+        await message.delete()
     except (ValueError, KeyError, telegram.error.TelegramError):
         pass
 
@@ -748,14 +788,14 @@ async def handle_content_input(update: Update, context: ContextTypes.DEFAULT_TYP
         content = None
         photo = None
 
-        if update.message.text == "/skip":
+        if message.text == "/skip":
             content = None
             photo = None
-        elif update.message.photo:
-            photo = update.message.photo[-1].file_id
-            content = update.message.caption or ""
+        elif message.photo:
+            photo = message.photo[-1].file_id
+            content = message.caption or ""
         else:
-            content = update.message.text or ""
+            content = message.text or ""
             photo = None
 
         await info_service.create_page(parent_id, title, content, photo)
@@ -763,7 +803,7 @@ async def handle_content_input(update: Update, context: ContextTypes.DEFAULT_TYP
         for key in ("cms_action", "cms_title", "cms_parent_id"):
             context.user_data.pop(key, None)
 
-        await update.message.reply_text(
+        await message.reply_text(
             "✅ Страница создана!",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ Вернуться к списку", callback_data=CB_INFO_MENU)]
@@ -773,7 +813,7 @@ async def handle_content_input(update: Update, context: ContextTypes.DEFAULT_TYP
     elif action == "edit_content":
         page_id = context.user_data.get("cms_page_id")
         if page_id is None:
-            await update.message.reply_text("Ошибка: страница не выбрана.")
+            await message.reply_text("Ошибка: страница не выбрана.")
             return ConversationHandler.END
 
         current_page = await info_service.get_page(page_id)
@@ -782,17 +822,17 @@ async def handle_content_input(update: Update, context: ContextTypes.DEFAULT_TYP
         new_text = None
         new_image = None
 
-        if update.message.text == "/skip":
+        if message.text == "/skip":
             new_text = ""
             new_image = existing_image
-        elif update.message.text == "/del_photo":
+        elif message.text == "/del_photo":
             new_text = current_page.get("body_text") if current_page else ""
             new_image = None
-        elif update.message.photo:
-            new_image = update.message.photo[-1].file_id
-            new_text = update.message.caption or ""
+        elif message.photo:
+            new_image = message.photo[-1].file_id
+            new_text = message.caption or ""
         else:
-            new_text = update.message.text or ""
+            new_text = message.text or ""
             new_image = existing_image
 
         await info_service.update_page_content(page_id, new_text, new_image)
@@ -800,7 +840,7 @@ async def handle_content_input(update: Update, context: ContextTypes.DEFAULT_TYP
         for key in ("cms_action", "cms_page_id"):
             context.user_data.pop(key, None)
 
-        await update.message.reply_text(
+        await message.reply_text(
             "✅ Содержимое обновлено!",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ Вернуться к списку", callback_data=CB_INFO_MENU)]
@@ -808,7 +848,7 @@ async def handle_content_input(update: Update, context: ContextTypes.DEFAULT_TYP
         )
 
     else:
-        await update.message.reply_text("Сценарий не активен.")
+        await message.reply_text("Сценарий не активен.")
         return ConversationHandler.END
 
     return ConversationHandler.END
