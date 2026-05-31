@@ -114,7 +114,14 @@ from tg_bot.handlers.ai_chat import (
 )
 from tg_bot.handlers.common import cleanup_previous_menu, handle_stale_callback
 from tg_bot.handlers.info import show_info_menu, toggle_edit_mode, show_item_options, move_item, info_cms_conversation
-from tg_bot.keyboards import CB_INFO_MENU, CB_PREFIX_INFO_GO
+from tg_bot.keyboards import (
+    CB_CMS_ITEM_OPTS,
+    CB_CMS_MODE_TOGGLE,
+    CB_CMS_MOVE_DOWN,
+    CB_CMS_MOVE_UP,
+    CB_INFO_MENU,
+    CB_PREFIX_INFO_GO,
+)
 from tg_bot.handlers.order import order_handler
 from tg_bot.handlers.registration import (
     handle_approval_callback,
