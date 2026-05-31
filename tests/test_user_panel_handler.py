@@ -4,6 +4,7 @@ from datetime import datetime
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
+import telegram
 from telegram import CallbackQuery, Message
 from telegram.constants import ParseMode
 
@@ -24,6 +25,7 @@ try:
         add_comment_to_order,
         delete_comment_of_order,
         handle_address_action,
+        handle_cancellation_reason,
         handle_logout_action,
         handle_support_routing,
         save_comment_to_order,
@@ -938,3 +940,53 @@ class TestSendOrEditOrderDetailsFallback:
         await send_or_edit_order_details(mock_update, mock_services, 42)
 
         mock_services.bot.send_message.assert_awaited_once()
+
+
+class TestHandleCancellationReason:
+    @pytest.mark.asyncio
+    async def test_notifies_admins_on_cancel(self, mock_update, mock_context):
+        mock_context.user_data['cancellation_order_id'] = 42
+        mock_context.user_data['cancellation_message_id'] = 100
+        mock_context.bot_data['order_service'] = AsyncMock()
+        mock_context.bot_data['order_service'].cancel_order_with_reason = AsyncMock()
+        mock_update.effective_user = MagicMock()
+        mock_update.effective_user.id = 123
+        mock_update.effective_chat = MagicMock()
+
+        with patch(
+            "tg_bot.handlers.user_panel.notify_admins_about_cancelled_order",
+            new_callable=AsyncMock,
+        ) as mock_notify:
+            result = await handle_cancellation_reason(mock_update, mock_context)
+            assert result == -1
+            mock_notify.assert_awaited_once_with(
+                context=mock_context,
+                order_id=42,
+                user_id=123,
+                reason="Без объяснения причин",
+            )
+
+    @pytest.mark.asyncio
+    async def test_no_order_id_skips_cancel(self, mock_update, mock_context):
+        mock_context.user_data['cancellation_order_id'] = None
+        mock_update.message = MagicMock()
+        mock_update.message.reply_text = AsyncMock()
+        result = await handle_cancellation_reason(mock_update, mock_context)
+        assert result == -1
+
+    @pytest.mark.asyncio
+    async def test_no_effective_user_skips_notification(self, mock_update, mock_context):
+        mock_context.user_data['cancellation_order_id'] = 42
+        mock_context.user_data['cancellation_message_id'] = 100
+        mock_context.bot_data['order_service'] = AsyncMock()
+        mock_context.bot_data['order_service'].cancel_order_with_reason = AsyncMock()
+        mock_update.effective_user = None
+        mock_update.effective_chat = MagicMock()
+
+        with patch(
+            "tg_bot.handlers.user_panel.notify_admins_about_cancelled_order",
+            new_callable=AsyncMock,
+        ) as mock_notify:
+            result = await handle_cancellation_reason(mock_update, mock_context)
+            assert result == -1
+            mock_notify.assert_not_called()

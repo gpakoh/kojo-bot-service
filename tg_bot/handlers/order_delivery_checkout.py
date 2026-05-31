@@ -17,7 +17,13 @@ from tg_bot.bot_services.settings_service import SettingsService
 from tg_bot.bot_services.user_address_service import UserAddressService
 from tg_bot.bot_services.user_service import UserService
 from tg_bot.handlers.common import cleanup_previous_menu
-from tg_bot.keyboards import get_delivery_method_keyboard, get_webapp_keyboard
+from tg_bot.handlers.order_admin_notifications import notify_admins_about_cancelled_order
+from tg_bot.handlers.order_notifications import notify_user_order_status_changed
+from tg_bot.keyboards import (
+    CB_PREFIX_ORDER_DETAILS,
+    get_delivery_method_keyboard,
+    get_webapp_keyboard,
+)
 from tg_bot.tenant.config import FeatureFlags
 
 logger = logging.getLogger(__name__)
@@ -169,6 +175,66 @@ async def send_order_success_message(
         logger.error(f"Error sending final order message: {e}")
 
 
+DELIVERY_LABELS = {
+    'pickup': 'Самовывоз',
+    'courier': 'Курьер',
+    'cdek_point': 'ПВЗ CDEK',
+    'yandex_point': 'ПВЗ Яндекс',
+}
+
+
+async def _notify_admins_about_new_order(
+    context: ContextTypes.DEFAULT_TYPE,
+    order: Any,
+    user_fio: str,
+    products_in_cart: dict[int, Any],
+    cart: dict[str, Any],
+) -> None:
+    admin_targets: set[int] = set()
+    gen_chat_id = context.bot_data.get('admin_chat_id')
+    if gen_chat_id:
+        admin_targets.add(int(gen_chat_id))
+    individual_ids = context.bot_data.get('admin_ids', [])
+    for a_id in individual_ids:
+        admin_targets.add(int(a_id))
+
+    if not admin_targets:
+        logger.warning("No admin targets configured, skipping new order #%s notification", order.id)
+        return
+
+    delivery_label = DELIVERY_LABELS.get(order.delivery_type or '', order.delivery_type or 'Не указан')
+    items_lines: list[str] = []
+    for pid_str, item in cart.items():
+        product = products_in_cart.get(int(pid_str))
+        product_name = product.name if product else f'Товар #{pid_str}'
+        items_lines.append(f"• {product_name} — {int(item['quantity'])} × {float(item['price']):.0f}₽")
+
+    text = (
+        f"🆕 <b>Новый заказ #{order.id}</b>\n\n"
+        f"<b>Клиент:</b> {user_fio}\n"
+        f"<b>Сумма:</b> {order.total_amount:.0f}₽\n"
+        f"<b>Доставка:</b> {delivery_label}"
+    )
+    if order.delivery_address:
+        text += f"\n<b>Адрес:</b> {order.delivery_address[:100]}"
+    if items_lines:
+        text += f"\n\n<b>Состав:</b>\n" + "\n".join(items_lines)
+
+    from tg_bot.keyboards import get_admin_order_keyboard
+    markup = get_admin_order_keyboard(order.id)
+
+    for target_id in admin_targets:
+        try:
+            await context.bot.send_message(
+                chat_id=target_id,
+                text=text,
+                reply_markup=markup,
+                parse_mode='HTML',
+            )
+        except telegram.error.TelegramError as exc:
+            logger.warning("Failed to notify admin %s about new order %s: %s", target_id, order.id, exc)
+
+
 async def finalize_order_and_pay(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -218,6 +284,9 @@ async def finalize_order_and_pay(
 
     cart, products_in_cart, cart_total, final_total = calc_result
 
+    user_data: dict[str, Any] = context.user_data or {}
+    is_new_order = not user_data.get('editing_order_id')
+
     delivery_data = (delivery_type, delivery_address, delivery_price, delivery_point_id, delivery_info)
     try:
         order, msg_prefix = await persist_order(
@@ -239,7 +308,6 @@ async def finalize_order_and_pay(
 
     cart_service: CartService = context.bot_data['cart_service']
     await cart_service.clear_cart(user_id)
-    user_data: dict[str, Any] = context.user_data or {}
     user_data['current_active_order_id'] = order.id
 
     user_service: UserService = context.bot_data['user_service']
@@ -273,12 +341,21 @@ async def finalize_order_and_pay(
         payment_url,
     )
 
+    if is_new_order:
+        await _notify_admins_about_new_order(context, order, user_fio, products_in_cart, cart)
+
     # Feature Flag: Auto-approve Orders (skip Moderation)
     app_config = get_app_config(context)
     flags = FeatureFlags(config=app_config)
     if await flags.is_enabled("auto_approve_orders"):
-        from tg_bot.domain.order import OrderStatus
-        await order_service.update_order_status(order.id, OrderStatus.AWAITING_PAYMENT)
+        from tg_bot.domain.order import OrderStatus as DomainOrderStatus
+        await order_service.update_order_status(order.id, DomainOrderStatus.AWAITING_PAYMENT)
+        await notify_user_order_status_changed(
+            context=context,
+            user_id=user_id,
+            order_id=order.id,
+            new_status=DomainOrderStatus.AWAITING_PAYMENT.value,
+        )
         logger.info("Auto-approve: order %s set to AWAITING_PAYMENT", order.id)
 
     return order_created_state
@@ -326,6 +403,12 @@ async def handle_order_created_actions(
 
     if query.data == order_action_cancel_callback:
         await order_service.cancel_order_with_reason(order_id, "Отменен пользователем")
+        await notify_admins_about_cancelled_order(
+            context=context,
+            order_id=order_id,
+            user_id=user_id,
+            reason="Отменен пользователем",
+        )
         logger.info(f"[ORDER] Order #{order_id} cancelled by user.")
 
         keyboard = [
