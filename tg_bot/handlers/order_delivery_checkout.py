@@ -656,6 +656,7 @@ async def choose_delivery_method(
     delivery_type_self_callback: str,
     delivery_type_pickup_callback: str,
     delivery_type_yandex_callback: str,
+    delivery_type_courier_callback: str,
     delivery_method_state: int,
 ) -> Any:
     """Маршрутизатор выбора способа доставки."""
@@ -682,6 +683,8 @@ async def choose_delivery_method(
         return await handle_cdek_selection_fn(update, context)
     elif data == delivery_type_yandex_callback:
         return await handle_yandex_selection_fn(update, context)
+    elif delivery_type_courier_callback and data == delivery_type_courier_callback:
+        return await handle_courier_selection(update, context, delivery_back_callback, delivery_method_state)
 
     logger.warning(f"Unknown delivery method: {data}")
     return delivery_method_state

@@ -844,6 +844,7 @@ async def choose_delivery_method(update: Update, context: ContextTypes.DEFAULT_T
         delivery_type_self_callback=CB_DELIVERY_TYPE_SELF,
         delivery_type_pickup_callback=CB_DELIVERY_TYPE_PICKUP,
         delivery_type_yandex_callback=CB_DELIVERY_TYPE_YANDEX,
+        delivery_type_courier_callback=CB_DELIVERY_TYPE_COURIER,
         delivery_method_state=DELIVERY_METHOD,
     )
 
