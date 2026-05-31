@@ -25,6 +25,7 @@ from tg_bot.bot_services.user_address_service import UserAddressService
 from tg_bot.bot_services.user_service import UserService
 from tg_bot.decorators import auth_guard
 from tg_bot.handlers.common import cleanup_previous_menu
+from tg_bot.handlers.order_admin_notifications import notify_admins_about_cancelled_order
 from tg_bot.keyboards import (
     CB_CANCEL_NO_REASON,
     CB_CLOSE_GENERIC,
@@ -314,6 +315,13 @@ async def handle_cancellation_reason(update: Update, context: ContextTypes.DEFAU
 
     order_service: OrderService = context.bot_data['order_service']
     await order_service.cancel_order_with_reason(order_id, reason)
+    if update.effective_user:
+        await notify_admins_about_cancelled_order(
+            context=context,
+            order_id=order_id,
+            user_id=update.effective_user.id,
+            reason=reason,
+        )
 
     result_text = f"✅ <b>Заказ #{order_id} успешно отменен.</b>\n📝 Причина: <i>{reason}</i>"
 

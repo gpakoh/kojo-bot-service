@@ -262,11 +262,16 @@ class TestHandleOrderCreatedActions:
             return_value=(MagicMock(), [])
         )
         mock_context.bot_data['order_service'].cancel_order_with_reason = AsyncMock()
-        result = await handle_order_created_actions(mock_update, mock_context)
-        assert result == ORDER_CREATED
-        mock_context.bot_data['order_service'].cancel_order_with_reason.assert_awaited_once_with(
-            42, "Отменен пользователем"
-        )
+        with patch(
+            "tg_bot.handlers.order_delivery_checkout.notify_admins_about_cancelled_order",
+            new_callable=AsyncMock,
+        ) as mock_notify:
+            result = await handle_order_created_actions(mock_update, mock_context)
+            assert result == ORDER_CREATED
+            mock_context.bot_data['order_service'].cancel_order_with_reason.assert_awaited_once_with(
+                42, "Отменен пользователем"
+            )
+            mock_notify.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_change_delivery(self, mock_update, mock_context):

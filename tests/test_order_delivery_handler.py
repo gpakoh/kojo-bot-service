@@ -804,3 +804,101 @@ class TestFinalizeOrderAndPayAdminNotification:
             order_created_state=ORDER_CREATED_STATE,
         )
         assert result == ORDER_CREATED_STATE
+
+
+class TestFinalizeOrderAndPayAutoApprove:
+    @pytest.mark.asyncio
+    async def test_auto_approve_notifies_user(self, mock_update, mock_context):
+        cq = _make_cq()
+        mock_update.callback_query = cq
+        mock_update.effective_chat = MagicMock()
+        mock_context.bot_data['cart_service'] = MagicMock()
+        mock_context.bot_data['cart_service'].get_cart = AsyncMock(
+            side_effect=[
+                {'1': {'price': '500', 'quantity': 2}},
+                None,
+            ]
+        )
+        mock_context.bot_data['cart_service'].clear_cart = AsyncMock()
+        mock_context.bot_data['order_service'] = MagicMock()
+        created_order = MagicMock(id=42, total_amount=1000.0, delivery_type='pickup')
+        mock_context.bot_data['order_service'].create_order = AsyncMock(return_value=created_order)
+        mock_context.bot_data['order_service'].set_payment_url = AsyncMock()
+        mock_context.bot_data['order_service'].update_order_status = AsyncMock(return_value=created_order)
+        mock_context.bot_data['user_service'] = MagicMock()
+        mock_context.bot_data['user_service'].get_user = AsyncMock(
+            return_value=MagicMock(fio='Test User', registration_message_id=None)
+        )
+        mock_context.bot_data['payment_service'] = MagicMock()
+        mock_context.bot_data['payment_service'].create_payment_url = AsyncMock(
+            return_value='https://pay.example.com/order/42'
+        )
+        mock_context.bot_data['app_config'] = MagicMock()
+        mock_context.bot_data['app_config'].get = AsyncMock(return_value='true')
+
+        with patch(
+            'tg_bot.handlers.order_delivery_checkout.notify_user_order_status_changed',
+            new_callable=AsyncMock,
+        ) as mock_notify:
+            result = await finalize_order_and_pay(
+                mock_update,
+                mock_context,
+                delivery_type='self_pickup',
+                delivery_price=0.0,
+                delivery_address='addr',
+                get_and_cache_all_products_fn=AsyncMock(return_value={1: MagicMock(id=1, name='P1')}),
+                send_order_success_message_fn=AsyncMock(),
+                order_created_state=ORDER_CREATED_STATE,
+            )
+            assert result == ORDER_CREATED_STATE
+            mock_notify.assert_awaited_once_with(
+                context=mock_context,
+                user_id=123456,
+                order_id=42,
+                new_status='Ожидает оплаты',
+            )
+
+    @pytest.mark.asyncio
+    async def test_auto_approve_disabled_does_not_notify(self, mock_update, mock_context):
+        cq = _make_cq()
+        mock_update.callback_query = cq
+        mock_update.effective_chat = MagicMock()
+        mock_context.bot_data['cart_service'] = MagicMock()
+        mock_context.bot_data['cart_service'].get_cart = AsyncMock(
+            side_effect=[
+                {'1': {'price': '500', 'quantity': 2}},
+                None,
+            ]
+        )
+        mock_context.bot_data['cart_service'].clear_cart = AsyncMock()
+        mock_context.bot_data['order_service'] = MagicMock()
+        created_order = MagicMock(id=42, total_amount=1000.0, delivery_type='pickup')
+        mock_context.bot_data['order_service'].create_order = AsyncMock(return_value=created_order)
+        mock_context.bot_data['order_service'].set_payment_url = AsyncMock()
+        mock_context.bot_data['user_service'] = MagicMock()
+        mock_context.bot_data['user_service'].get_user = AsyncMock(
+            return_value=MagicMock(fio='Test User', registration_message_id=None)
+        )
+        mock_context.bot_data['payment_service'] = MagicMock()
+        mock_context.bot_data['payment_service'].create_payment_url = AsyncMock(
+            return_value='https://pay.example.com/order/42'
+        )
+        mock_context.bot_data['app_config'] = MagicMock()
+        mock_context.bot_data['app_config'].get = AsyncMock(return_value=None)
+
+        with patch(
+            'tg_bot.handlers.order_delivery_checkout.notify_user_order_status_changed',
+            new_callable=AsyncMock,
+        ) as mock_notify:
+            result = await finalize_order_and_pay(
+                mock_update,
+                mock_context,
+                delivery_type='self_pickup',
+                delivery_price=0.0,
+                delivery_address='addr',
+                get_and_cache_all_products_fn=AsyncMock(return_value={1: MagicMock(id=1, name='P1')}),
+                send_order_success_message_fn=AsyncMock(),
+                order_created_state=ORDER_CREATED_STATE,
+            )
+            assert result == ORDER_CREATED_STATE
+            mock_notify.assert_not_called()
